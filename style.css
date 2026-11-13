@@ -1,14 +1,18 @@
-/* 網頁對照譯文：暗黃底、淺色字 */
+/* 譯文外觀由 CSS 變數控制，值來自 settings.js 的 applyTo()
+   --bt-bg 底色、--bt-fg 文字色（依底色自動選黑或白）、--bt-scale 字級倍率
+   var() 第二個參數是預設值：設定還沒套上時的樣子（深紅底） */
+
+/* 網頁對照譯文 */
 /* 決策: 重設會被頁面繼承的文字樣式，避免大寫、字距、裝飾線跑到譯文上 */
 .bt-zh {
   display: block;
   margin: 4px 0 8px;
   padding: 4px 8px;
   border-radius: 4px;
-  background: #7a6500;
-  color: #fff6d5;
+  background: var(--bt-bg, #8b1a1a);
+  color: var(--bt-fg, #fff5f5);
   font-family: inherit;
-  font-size: 0.95em;
+  font-size: calc(var(--bt-scale, 0.95) * 1em);
   font-style: normal;
   font-weight: normal;
   line-height: 1.6;
@@ -20,20 +24,58 @@
   word-break: break-word;
 }
 
-/* YouTube 字幕譯文：置於英文字幕正下方，同樣暗黃底 */
+/* ---------- YouTube 雙語字幕框 ---------- */
+
+/* 決策: 原生字幕只是隱藏（opacity），不移除，因為還要從它讀英文 */
+.bt-yt-hide-native .ytp-caption-window-container {
+  opacity: 0 !important;
+}
+
+/* 決策: 框以 bottom 定位、往上長；中文是最後一個子元素，固定貼底不會被英文推走 */
 /* 注意: pointer-events 關閉，避免擋住播放器的點擊與暫停 */
-.bt-yt-zh {
-  display: block;
-  width: fit-content;
-  max-width: 90%;
-  margin: 4px auto 0;
-  padding: 2px 8px;
-  border-radius: 3px;
-  background: #7a6500;
-  color: #fff6d5;
-  font-family: inherit;
-  font-size: 0.9em;
+.bt-yt-box {
+  position: absolute;
+  left: 50%;
+  bottom: 60px; /* 控制列出現時，留出它的高度 */
+  transform: translateX(-50%);
+  z-index: 40; /* 低於 YouTube 控制列 */
+  max-width: 80%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-family: 'YouTube Noto', Roboto, 'PingFang TC', sans-serif;
+  font-size: calc(var(--bt-scale, 0.95) * var(--bt-yt-base, 20px));
   line-height: 1.4;
   text-align: center;
   pointer-events: none;
+}
+
+/* 控制列自動隱藏時，字幕往下移，跟原生行為一致 */
+.ytp-autohide > .bt-yt-box {
+  bottom: 20px;
+}
+
+.bt-yt-box[hidden] {
+  display: none;
+}
+
+.bt-yt-en {
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: rgba(8, 8, 8, 0.75);
+  color: #ffffff;
+  white-space: pre-line;
+}
+
+.bt-yt-zh {
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: var(--bt-bg, #8b1a1a);
+  color: var(--bt-fg, #fff5f5);
+}
+
+/* 譯文還沒回來時不顯示空色塊 */
+.bt-yt-zh:empty {
+  display: none;
 }

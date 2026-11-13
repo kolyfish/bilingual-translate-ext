@@ -7,14 +7,17 @@
   window.__btLoaded = true
 
   const BT = window.BT
+  const Settings = window.BT_SETTINGS
   const { DONE_ATTR, state } = BT
-  const SYNC_DEFAULTS = { position: 'below', youtubeAuto: false }
   const isYouTube = location.hostname === 'www.youtube.com'
+  // 決策: 外觀變數掛在 <html> 上，改顏色或字級時所有譯文即時生效，不用重建
+  const root = document.documentElement
 
   function start(settings) {
     if (state.enabled) return
     state.enabled = true
     state.position = settings.position
+    Settings.applyTo(root, settings)
     state.session += 1
     const session = state.session
 
@@ -36,10 +39,10 @@
     clearTimeout(state.timer)
     state.timer = null
     state.queue.length = 0
-    state.yt?.remove()
-    state.yt = null
+    if (isYouTube) BT.youtube.stop()
     document.querySelectorAll('.bt-zh').forEach((n) => n.remove())
     document.querySelectorAll(`[${DONE_ATTR}]`).forEach((n) => n.removeAttribute(DONE_ATTR))
+    Settings.clearFrom(root)
   }
 
   // 資安: 頁面有密碼欄位通常是登入頁或帳戶頁，整頁拒絕翻譯
@@ -57,21 +60,24 @@
       return 'stopped'
     }
     if (hasPasswordField()) return 'blocked'
-    start(await chrome.storage.sync.get(SYNC_DEFAULTS))
+    start(await Settings.load())
     return 'started'
   }
 
   BT.toggle = toggle
 
   if (isYouTube) {
-    chrome.storage.sync.get(SYNC_DEFAULTS).then((settings) => {
+    Settings.load().then((settings) => {
       if (settings.youtubeAuto) start(settings)
     })
   }
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'sync') return
-    chrome.storage.sync.get(SYNC_DEFAULTS).then((settings) => {
+    Settings.load().then((settings) => {
+      if (state.enabled && (changes.bgColor || changes.fontScale)) {
+        Settings.applyTo(root, settings)
+      }
       if (isYouTube && changes.youtubeAuto) {
         if (settings.youtubeAuto) {
           start(settings)

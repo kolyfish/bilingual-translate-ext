@@ -43,8 +43,8 @@ const DEFAULT_DENYLIST = [
 const BANK_HOST_RE = /bank/i
 
 const SCRIPT_FILES = {
-  page: ['content-shared.js', 'content-page.js', 'content-index.js'],
-  youtube: ['content-shared.js', 'content-youtube.js', 'content-index.js']
+  page: ['settings.js', 'content-shared.js', 'content-page.js', 'content-index.js'],
+  youtube: ['settings.js', 'content-shared.js', 'content-youtube.js', 'content-index.js']
 }
 
 const BADGES = {

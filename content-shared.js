@@ -21,8 +21,7 @@
     mo: null,
     timer: null,
     queue: [],
-    active: 0,
-    yt: null // YouTube 譯文 overlay 節點
+    active: 0
   }
 
   const normalize = (s) => s.replace(/\s+/g, ' ').trim()

@@ -1,5 +1,5 @@
-// 彈窗：觸發翻譯、管理 Google 翻譯權限、設定與黑名單
-const SYNC_DEFAULTS = { position: 'below', youtubeAuto: false }
+// 彈窗：觸發翻譯、管理 Google 翻譯權限、外觀設定與黑名單
+const Settings = window.BT_SETTINGS
 const GTX_PERMISSION = { origins: ['https://translate.googleapis.com/*'] }
 // 只接受合法網域字元，避免存入奇怪的字串
 const HOSTNAME_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/
@@ -22,6 +22,19 @@ async function refreshGtx() {
   $('gtx-revoke').hidden = !granted
 }
 
+// 預覽只反映畫面上的值，存檔在 change 事件
+function renderAppearance() {
+  const draft = Settings.sanitize({ bgColor: $('bg-color').value, fontScale: $('font-scale').value })
+  Settings.applyTo($('preview'), draft)
+  $('font-scale-value').textContent = `${draft.fontScale}%`
+}
+
+function fillAppearance(settings) {
+  $('bg-color').value = settings.bgColor
+  $('font-scale').value = settings.fontScale
+  renderAppearance()
+}
+
 $('toggle-page').addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   const res = await chrome.runtime.sendMessage({ type: 'toggle-tab', tabId: tab.id })
@@ -35,6 +48,23 @@ $('gtx-grant').addEventListener('click', () => {
 
 $('gtx-revoke').addEventListener('click', () => {
   chrome.permissions.remove(GTX_PERMISSION).then(refreshGtx)
+})
+
+// 決策: 拖動時（input）只更新預覽，放開時（change）才寫入
+// 原因: storage.sync 每分鐘最多寫 120 次，拖動滑桿或色盤會連續觸發，很快就超過
+$('bg-color').addEventListener('input', renderAppearance)
+$('font-scale').addEventListener('input', renderAppearance)
+$('bg-color').addEventListener('change', () => {
+  chrome.storage.sync.set({ bgColor: Settings.sanitize({ bgColor: $('bg-color').value }).bgColor })
+})
+$('font-scale').addEventListener('change', () => {
+  chrome.storage.sync.set({ fontScale: Settings.sanitize({ fontScale: $('font-scale').value }).fontScale })
+})
+
+$('reset-appearance').addEventListener('click', () => {
+  const { bgColor, fontScale } = Settings.DEFAULTS
+  chrome.storage.sync.set({ bgColor, fontScale })
+  fillAppearance(Settings.DEFAULTS)
 })
 
 $('position').addEventListener('change', () => {
@@ -55,9 +85,13 @@ $('save-denylist').addEventListener('click', async () => {
   $('denylist-status').textContent = invalid.length > 0 ? `已儲存，忽略無效項：${invalid.join(', ')}` : '已儲存'
 })
 
-chrome.storage.sync.get(SYNC_DEFAULTS).then((settings) => {
+$('font-scale').min = Settings.FONT_SCALE_MIN
+$('font-scale').max = Settings.FONT_SCALE_MAX
+
+Settings.load().then((settings) => {
   $('position').value = settings.position
   $('youtube-auto').checked = settings.youtubeAuto
+  fillAppearance(settings)
 })
 
 chrome.storage.local.get({ denylistExtra: [] }).then(({ denylistExtra }) => {

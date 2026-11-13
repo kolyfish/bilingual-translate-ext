@@ -12,6 +12,12 @@
     .note { margin: 6px 0 0; font-size: 12px; color: #666; line-height: 1.5; }
     .warn { color: #b26a00; }
     #status { min-height: 1.5em; }
+    input[type="range"] { flex: 1; margin: 0 8px; }
+    #preview {
+      margin-top: 8px; padding: 4px 8px; border-radius: 4px;
+      background: var(--bt-bg); color: var(--bt-fg);
+      font-size: calc(var(--bt-scale) * 14px); line-height: 1.6;
+    }
   </style>
 </head>
 <body>
@@ -24,6 +30,21 @@
     <p class="note warn">允許後，要翻譯的文字會送到 Google 伺服器。</p>
     <button id="gtx-grant" hidden>允許使用</button>
     <button id="gtx-revoke" hidden>撤銷權限</button>
+  </section>
+
+  <section>
+    <strong>譯文外觀</strong>
+    <label>
+      底色
+      <input type="color" id="bg-color">
+    </label>
+    <label>
+      字級
+      <input type="range" id="font-scale" step="5">
+      <span id="font-scale-value"></span>
+    </label>
+    <div id="preview">這是譯文預覽，文字顏色會依底色自動調整。</div>
+    <p class="note"><button id="reset-appearance">恢復預設（深紅、95%）</button></p>
   </section>
 
   <section>
@@ -49,6 +70,7 @@
     <span id="denylist-status" class="note"></span>
   </section>
 
+  <script src="settings.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
