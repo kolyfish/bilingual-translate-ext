@@ -34,6 +34,27 @@ const EXT_B = buildCopy('b', (m) => {
   m.host_permissions = ['<all_urls>', 'https://translate.googleapis.com/*']
 })
 
+// 假的 Chrome 內建 Translator API，注入到內容腳本的 isolated world
+// 決策: Playwright 的 Chromium 沒有可用的本機語言包，只能模擬；
+//       但「下載需要使用者手勢」這條規則照真的 API 實作，確保提示條的點擊流程正確
+fs.writeFileSync(
+  path.join(EXT_B, 'fake-translator.js'),
+  `globalThis.__fake = globalThis.__fake || { availability: 'downloadable', calls: 0 }
+globalThis.Translator = {
+  availability: async () => __fake.availability,
+  create: async (opts) => {
+    if (__fake.availability !== 'available') {
+      if (!navigator.userActivation.isActive) throw new DOMException('需要使用者手勢', 'NotAllowedError')
+      const monitor = new EventTarget()
+      opts.monitor?.(monitor)
+      for (const loaded of [0.25, 0.6, 1]) monitor.dispatchEvent(Object.assign(new Event('downloadprogress'), { loaded }))
+      __fake.availability = 'available'
+    }
+    return { translate: async (t) => { __fake.calls += 1; return '本機譯文：' + t } }
+  }
+}`
+)
+
 const results = []
 const check = (name, ok, detail = '') => {
   results.push({ name, ok })
@@ -112,7 +133,8 @@ async function suiteA() {
   try {
     const url = 'https://article.test/'
     const page = await openPage(context, url)
-    check('未授權 Google → no-permission', (await toggle(sw, url)) === 'no-permission')
+    await sw.evaluate(() => chrome.storage.sync.set({ engine: 'gtx' }))
+    check('Google 模式未授權 → no-permission', (await toggle(sw, url)) === 'no-permission')
     check('徽章顯示 !', (await badge(sw, url)) === '!')
     check('未授權時不注入（頁面沒有譯文）', (await page.locator('.bt-zh').count()) === 0)
 
@@ -131,10 +153,11 @@ async function suiteB() {
   // 決策: 換成假翻譯引擎。真 gtx 已經因為測試次數太多被 Google 限流，而且測試不該依賴外部服務
   await sw.evaluate(() => {
     self.__calls = []
-    ACTIVE_PROVIDER.translate = async (t) => {
+    REMOTE_PROVIDER.translate = async (t) => {
       self.__calls.push(t)
       return `測試譯文：${t}`
     }
+    return chrome.storage.sync.set({ engine: 'gtx' })
   })
   const callCount = () => sw.evaluate(() => self.__calls.length)
   try {
@@ -267,6 +290,65 @@ async function suiteB() {
     await yt.waitForFunction(() => !document.querySelector('.bt-yt-box'))
     const nativeRestored = await yt.locator('#movie_player').evaluate((el) => !el.classList.contains('bt-yt-hide-native'))
     check('關閉後移除雙語框並恢復原生字幕', nativeRestored)
+
+    console.log('\n— 本機引擎（Translator API）—')
+    await sw.evaluate(() => chrome.storage.sync.set({ engine: 'local' }))
+
+    // 沒裝假 API 時，看 Playwright 的 Chromium 是否自帶 Translator
+    const plainUrl = 'https://article.test/?plain'
+    await openPage(context, plainUrl)
+    const plainStatus = await toggle(sw, plainUrl)
+    check('沒有假 API 時不會出錯', plainStatus !== 'error', `Chromium 回報 ${plainStatus}`)
+
+    const localUrl = 'https://article.test/?local'
+    const lp = await openPage(context, localUrl)
+    const injectFake = (u) =>
+      sw.evaluate(async (target) => {
+        const tab = (await chrome.tabs.query({})).find((t) => t.url === target)
+        await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['fake-translator.js'] })
+      }, u)
+    await injectFake(localUrl)
+    const remoteBefore = await callCount()
+
+    check('語言包未下載 → needs-download', (await toggle(sw, localUrl)) === 'needs-download')
+    check('徽章顯示 ↓', (await badge(sw, localUrl)) === '↓')
+    await lp.waitForSelector('.bt-banner')
+    check('頁面右下角出現下載提示條', true)
+    check('下載前沒有任何譯文', (await lp.locator('.bt-zh').count()) === 0)
+
+    await lp.getByRole('button', { name: '下載並翻譯' }).click()
+    await lp.waitForSelector('#p1 + .bt-zh')
+    const localZh = await lp.locator('#p1 + .bt-zh').textContent()
+    check('點擊下載後用本機引擎翻譯', localZh.startsWith('本機譯文：'), localZh)
+    check('下載完成後提示條消失', (await lp.locator('.bt-banner').count()) === 0)
+    check('下載完成後徽章變 ON', (await badge(sw, localUrl)) === 'ON')
+    check('本機模式完全沒有呼叫線上引擎', (await callCount()) === remoteBefore, `線上呼叫 ${(await callCount()) - remoteBefore} 次`)
+
+    const forced = await sw.evaluate(async (target) => {
+      const tab = (await chrome.tabs.query({})).find((t) => t.url === target)
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => new Promise((resolve) => chrome.runtime.sendMessage({ type: 'translate', text: 'hello world test' }, resolve))
+      })
+      return result
+    }, localUrl)
+    check('本機模式下硬送線上請求 → background 拒絕 engine-local', forced?.error === 'engine-local', JSON.stringify(forced))
+
+    check('再觸發 → stopped', (await toggle(sw, localUrl)) === 'stopped')
+    check('還原後譯文移除', (await lp.locator('.bt-zh').count()) === 0)
+    check('語言包已下載 → 直接 started，不再出現提示條', (await toggle(sw, localUrl)) === 'started')
+    check('第二次沒有提示條', (await lp.locator('.bt-banner').count()) === 0)
+    await toggle(sw, localUrl)
+
+    const cancelUrl = 'https://article.test/?cancel'
+    const cp = await openPage(context, cancelUrl)
+    await injectFake(cancelUrl)
+    check('另一頁未下載 → needs-download', (await toggle(sw, cancelUrl)) === 'needs-download')
+    await cp.getByRole('button', { name: '取消' }).click()
+    await cp.waitForFunction(() => !document.querySelector('.bt-banner'))
+    check('按取消後提示條消失、沒有譯文', (await cp.locator('.bt-zh').count()) === 0)
+    await cp.waitForFunction(() => true)
+    check('按取消後徽章清空', (await badge(sw, cancelUrl)) === '')
   } finally {
     await context.close()
   }

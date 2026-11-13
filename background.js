@@ -1,9 +1,14 @@
-// 背景服務：翻譯代理 + 按需注入
+// 背景服務：按需注入 + 線上翻譯代理
 // 資安原則（詳見 SECURITY.md）：
 //   1. 只在使用者點擊或按快捷鍵時，才透過 activeTab 取得該分頁權限
 //   2. 敏感網站、非 http(s) 頁面一律拒絕
-//   3. 翻譯請求要驗證來源、型別、長度與每頁次數
-//   4. log 只記錄錯誤類型，絕不記錄原文
+//   3. 本機引擎模式下，拒絕所有線上翻譯請求（保證文字不離開電腦）
+//   4. 線上翻譯請求要驗證來源、型別、長度與每頁次數
+//   5. log 只記錄錯誤類型，絕不記錄原文
+// 注意: 本機翻譯（Translator API）在內容腳本執行，不經過這裡
+
+importScripts('settings.js')
+const Settings = globalThis.BT_SETTINGS
 
 const GTX_PERMISSION = { origins: ['https://translate.googleapis.com/*'] }
 const FETCH_TIMEOUT_MS = 8000
@@ -53,6 +58,8 @@ const BADGES = {
   blocked: { text: '✕', color: '#c62828' },
   denied: { text: '✕', color: '#c62828' },
   'no-permission': { text: '!', color: '#c62828' },
+  'needs-download': { text: '↓', color: '#1565c0' },
+  'local-unavailable': { text: '!', color: '#c62828' },
   error: { text: '!', color: '#c62828' }
 }
 
@@ -60,6 +67,8 @@ const BADGES = {
 const cache = new Map()
 // 注意: service worker 閒置被回收時計數會歸零，所以這是軟性上限，不是硬保證
 const requestCount = new Map()
+// 已插入 style.css 的分頁，避免重複插入堆疊
+const cssTabs = new Set()
 
 /* ---------- 翻譯引擎 ---------- */
 
@@ -81,13 +90,10 @@ async function translateGtx(text) {
   return data[0].map((seg) => seg[0]).join('')
 }
 
-// 引擎登錄表：Phase 2 會在這裡加入本機 Translator API
-const PROVIDERS = {
-  gtx: { translate: translateGtx, permission: GTX_PERMISSION }
-}
-const ACTIVE_PROVIDER = PROVIDERS.gtx
+// 線上引擎：要換成 DeepL / Claude 只需替換這個物件（本機引擎在 content-shared.js）
+const REMOTE_PROVIDER = { translate: translateGtx, permission: GTX_PERMISSION }
 
-const hasProviderPermission = () => chrome.permissions.contains(ACTIVE_PROVIDER.permission)
+const hasRemotePermission = () => chrome.permissions.contains(REMOTE_PROVIDER.permission)
 
 /* ---------- 網站黑名單 ---------- */
 
@@ -123,14 +129,15 @@ function setBadge(tabId, status) {
  * 決策: 黑名單與權限在注入「之前」檢查，被拒的頁面完全不會載入內容腳本
  * 注意: 呼叫端必須來自使用者手勢（工具列、快捷鍵），activeTab 才會給 tab.url
  * Returns:
- *   string: started | stopped | blocked | denied | no-permission | error（不拋例外）
+ *   string: started | stopped | blocked | denied | no-permission | needs-download | local-unavailable | error（不拋例外）
  */
 async function toggleTab(tab) {
   let status
   try {
+    const settings = await Settings.load()
     if (await isDenied(tab.url)) {
       status = 'denied'
-    } else if (!(await hasProviderPermission())) {
+    } else if (settings.engine === 'gtx' && !(await hasRemotePermission())) {
       status = 'no-permission'
     } else {
       const isYouTube = new URL(tab.url).hostname === YOUTUBE_HOST
@@ -138,9 +145,8 @@ async function toggleTab(tab) {
       await chrome.scripting.executeScript({ target, files: isYouTube ? SCRIPT_FILES.youtube : SCRIPT_FILES.page })
       const [{ result }] = await chrome.scripting.executeScript({ target, func: () => window.BT.toggle() })
       status = result
-      // YouTube 已由 manifest 靜態注入 CSS；一般網頁跟著啟停插入/移除，避免重複堆疊
-      if (!isYouTube && status === 'started') await chrome.scripting.insertCSS({ target, files: ['style.css'] })
-      if (!isYouTube && status === 'stopped') await chrome.scripting.removeCSS({ target, files: ['style.css'] })
+      // YouTube 已由 manifest 靜態注入 CSS；一般網頁在需要畫東西時才插入（譯文或下載提示條）
+      if (!isYouTube) await syncPageCss(target, status)
     }
   } catch (err) {
     // 例如 Chrome Web Store 頁面禁止注入
@@ -151,47 +157,67 @@ async function toggleTab(tab) {
   return status
 }
 
+async function syncPageCss(target, status) {
+  const needsCss = status === 'started' || status === 'needs-download'
+  if (needsCss && !cssTabs.has(target.tabId)) {
+    await chrome.scripting.insertCSS({ target, files: ['style.css'] })
+    cssTabs.add(target.tabId)
+  }
+  if (status === 'stopped' && cssTabs.has(target.tabId)) {
+    await chrome.scripting.removeCSS({ target, files: ['style.css'] })
+    cssTabs.delete(target.tabId)
+  }
+}
+
 /* ---------- 訊息處理 ---------- */
 
+// 這些是預期中的拒絕原因，原樣回給內容腳本；其他錯誤一律回 translate-failed
+const KNOWN_REJECTIONS = new Set(['engine-local', 'no-permission', 'quota-exceeded'])
+
+async function translateRemote(text, sender) {
+  // 資安: 本機模式保證不對外連線，就算有內容腳本送來請求（例如切換引擎前開的舊分頁）也拒絕
+  const settings = await Settings.load()
+  if (settings.engine !== 'gtx') throw new Error('engine-local')
+  if (cache.has(text)) return cache.get(text)
+
+  const tabId = sender.tab.id
+  const isYouTube = sender.url?.startsWith(`https://${YOUTUBE_HOST}/`)
+  const limit = isYouTube ? MAX_REQUESTS_YOUTUBE : MAX_REQUESTS_PER_PAGE
+  const count = (requestCount.get(tabId) || 0) + 1
+  if (count > limit) throw new Error('quota-exceeded')
+  requestCount.set(tabId, count)
+
+  if (!(await hasRemotePermission())) throw new Error('no-permission')
+  const zh = await REMOTE_PROVIDER.translate(text)
+  if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value)
+  cache.set(text, zh)
+  return zh
+}
+
 function handleTranslate(msg, sender, sendResponse) {
-  const tabId = sender.tab?.id
   const text = msg.text
-  if (tabId === undefined || typeof text !== 'string' || text.length === 0 || text.length > MAX_TEXT_CHARS) {
+  if (sender.tab?.id === undefined || typeof text !== 'string' || text.length === 0 || text.length > MAX_TEXT_CHARS) {
     sendResponse({ ok: false, error: 'invalid-request' })
     return false
   }
 
-  if (cache.has(text)) {
-    sendResponse({ ok: true, text: cache.get(text) })
-    return false
-  }
-
-  const isYouTube = sender.url?.startsWith(`https://${YOUTUBE_HOST}/`)
-  const limit = isYouTube ? MAX_REQUESTS_YOUTUBE : MAX_REQUESTS_PER_PAGE
-  const count = (requestCount.get(tabId) || 0) + 1
-  if (count > limit) {
-    sendResponse({ ok: false, error: 'quota-exceeded' })
-    return false
-  }
-  requestCount.set(tabId, count)
-
-  hasProviderPermission()
-    .then((granted) => {
-      if (!granted) throw new Error('no-permission')
-      return ACTIVE_PROVIDER.translate(text)
-    })
-    .then((zh) => {
-      if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value)
-      cache.set(text, zh)
-      sendResponse({ ok: true, text: zh })
-    })
+  translateRemote(text, sender)
+    .then((zh) => sendResponse({ ok: true, text: zh }))
     .catch((err) => {
+      const known = KNOWN_REJECTIONS.has(err.message)
       // 注意: 只記錄錯誤類型與訊息，不記錄 text，避免原文留在 log
-      console.error('[bilingual] 翻譯失敗', err.name, err.message)
-      sendResponse({ ok: false, error: err.message === 'no-permission' ? 'no-permission' : 'translate-failed' })
+      if (!known) console.error('[bilingual] 翻譯失敗', err.name, err.message)
+      sendResponse({ ok: false, error: known ? err.message : 'translate-failed' })
     })
   // 決策: return true 讓 sendResponse 可以非同步回傳
   return true
+}
+
+// 內容腳本回報狀態（例如在頁面上按完下載），用來更新徽章
+function handleReportStatus(msg, sender) {
+  if (sender.tab?.id === undefined || !Object.hasOwn(BADGES, msg.status)) return false
+  setBadge(sender.tab.id, msg.status)
+  return false
 }
 
 function handleToggleFromPopup(msg, sender, sendResponse) {
@@ -215,6 +241,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id || !msg || typeof msg !== 'object') return false
   if (msg.type === 'translate') return handleTranslate(msg, sender, sendResponse)
   if (msg.type === 'toggle-tab') return handleToggleFromPopup(msg, sender, sendResponse)
+  if (msg.type === 'report-status') return handleReportStatus(msg, sender)
   return false
 })
 
@@ -226,7 +253,11 @@ chrome.commands.onCommand.addListener((command, tab) => {
 chrome.tabs.onUpdated.addListener((tabId, info) => {
   if (info.status !== 'loading') return
   requestCount.delete(tabId)
+  cssTabs.delete(tabId)
   chrome.action.setBadgeText({ tabId, text: '' })
 })
 
-chrome.tabs.onRemoved.addListener((tabId) => requestCount.delete(tabId))
+chrome.tabs.onRemoved.addListener((tabId) => {
+  requestCount.delete(tabId)
+  cssTabs.delete(tabId)
+})

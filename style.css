@@ -24,6 +24,53 @@
   word-break: break-word;
 }
 
+/* ---------- 本機模型下載提示條 ---------- */
+/* 決策: 固定在右下角、字型與大小寫死，不受頁面樣式影響 */
+.bt-banner {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483647;
+  max-width: 320px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #1f1f1f;
+  color: #f5f5f5;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  font: 14px/1.5 system-ui, 'PingFang TC', sans-serif;
+  text-align: left;
+}
+
+.bt-banner-status {
+  margin-top: 6px;
+  color: #9ecbff;
+  font-size: 13px;
+}
+
+.bt-banner-status:empty {
+  display: none;
+}
+
+.bt-banner button {
+  margin: 10px 8px 0 0;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 4px;
+  background: #8b1a1a;
+  color: #ffffff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.bt-banner button + button {
+  background: #444444;
+}
+
+.bt-banner button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* ---------- YouTube 雙語字幕框 ---------- */
 
 /* 決策: 原生字幕只是隱藏（opacity），不移除，因為還要從它讀英文 */

@@ -5,7 +5,7 @@
 - 核心功能：
   1. 網頁：點擊或 `Alt+A` 才翻譯，英文上方或下方插入中文，底色與字級可調（預設深紅、95%）
   2. YouTube：讀英文 CC，畫自己的雙語框，中文固定貼底
-- 技術棧：Chrome Extension Manifest V3、原生 JavaScript（無建置工具、零執行期依賴）、Google gtx 翻譯端點
+- 技術棧：Chrome Extension Manifest V3、原生 JavaScript（無建置工具、零執行期依賴）；翻譯預設用 Chrome 內建 Translator API（本機），可選 Google gtx
 - 完整使用與開發說明見 `README.md`，資安設計見 `SECURITY.md`
 
 ## 架構設計
@@ -27,9 +27,9 @@
 ### 模組職責
 | 模組 | 職責 | 不做的事 |
 |------|------|----------|
-| `background` | 能不能注入、驗證訊息、翻譯、快取、徽章 | 不碰頁面 DOM |
+| `background` | 能不能注入、本機模式擋線上請求、驗證訊息、gtx、快取、徽章 | 不碰頁面 DOM；不跑本機翻譯 |
 | `settings` | 預設值、驗證、文字色、套 CSS 變數 | 不讀寫頁面內容 |
-| `content-shared` | 狀態、佇列、節流、訊息封裝 | 不知道頁面結構 |
+| `content-shared` | 狀態、佇列、節流、本機 Translator、依引擎分流 | 不知道頁面結構 |
 | `content-page` | 文字塊掃描、懶翻譯、插入 | 不處理 YouTube |
 | `content-youtube` | 讀字幕行、合併逐字更新、雙語框 | 不處理一般網頁 |
 | `content-index` | toggle、啟停、密碼欄位檢查、設定監聽 | 不含掃描邏輯 |
@@ -107,3 +107,13 @@ popup → storage.sync → onChanged → 外觀即時套用 / 位置重建 / You
   - 底色、字級可調，預設改成深紅 `#8b1a1a`、95%；文字色依底色自動挑；改設定即時生效。新增 `settings.js` 統一預設值與驗證。
   - YouTube 改成自己畫雙語框，中文固定貼底，修正中文被下一行英文推走的問題；逐字更新合併成一次請求。
   - 測試搬進 `tests/`（單元 + 46 項 e2e，翻譯引擎用假的）；新增開發說明書 `README.md`。
+- 2026-11-13：repo 改為公開。公開前掃過整個歷史，沒有密鑰、私人信箱或本機帳號名稱。
+- 2026-11-13：v0.5.0，資安 Phase 2 本機翻譯。
+  - 新增引擎設定，預設本機（Chrome 內建 Translator API，`en → zh-Hant`），Google 改為選用。
+  - 本機翻譯在內容腳本執行，不經 background；併發改成 1，因為 API 本來就依序處理。
+  - 第一次使用要在頁面上點「下載並翻譯」，因為 `Translator.create()` 需要該頁面的使用者手勢，工具列和快捷鍵都不算。
+  - background 在本機模式拒絕所有線上請求（`engine-local`）。不做本機失敗自動改用 Google，避免資料在使用者不知情時送出去。
+  - `settings.js` 改用 `globalThis`，background 也用 `importScripts` 共用同一份預設值與驗證。
+  - 新增徽章 `↓`（需下載），內容腳本可以回報狀態更新徽章；CSS 插入改成按分頁記錄，避免重複堆疊。
+  - e2e 增加到 63 項，本機引擎用照真實規則寫的假 API（下載必須有使用者手勢）。
+  - 踩坑：Chromium 的內容腳本有 `Translator`，也會回報 `downloadable`，但無頭模式的真實下載一直不會完成，拿掉 `--disable-component-update` 也一樣，只能在品牌版 Chrome 上驗證。

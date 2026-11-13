@@ -1,10 +1,14 @@
 // 設定的唯一來源：預設值、驗證、文字顏色計算
-// 決策: 彈窗與內容腳本都載入這支檔案，避免預設值在兩邊各寫一份
+// 決策: 彈窗、內容腳本、background 都載入這支檔案，避免預設值各寫一份
+// 注意: 用 globalThis 而非 window，因為 background 是 service worker，沒有 window
 // 注意: storage.sync 可能被其他裝置或舊版本寫入，讀出來一律先 sanitize
 (() => {
-  if (window.BT_SETTINGS) return
+  if (globalThis.BT_SETTINGS) return
 
   const DEFAULTS = {
+    // 'local' = Chrome 內建 Translator API（文字不離開電腦）；'gtx' = Google 線上翻譯
+    // 決策: 預設本機，Google 要使用者主動切換並授權
+    engine: 'local',
     position: 'below',
     youtubeAuto: false,
     bgColor: '#8b1a1a', // 深紅
@@ -21,6 +25,8 @@
     const s = { ...DEFAULTS, ...raw }
     const scale = Number(s.fontScale)
     return {
+      // 資安: 只有明確寫 'gtx' 才用線上引擎，其他任何值都退回本機
+      engine: s.engine === 'gtx' ? 'gtx' : 'local',
       position: s.position === 'above' ? 'above' : 'below',
       youtubeAuto: s.youtubeAuto === true,
       bgColor: HEX_COLOR_RE.test(s.bgColor) ? s.bgColor.toLowerCase() : DEFAULTS.bgColor,
@@ -60,7 +66,7 @@
     for (const name of ['--bt-bg', '--bt-fg', '--bt-scale']) el.style.removeProperty(name)
   }
 
-  window.BT_SETTINGS = {
+  globalThis.BT_SETTINGS = {
     DEFAULTS,
     FONT_SCALE_MIN,
     FONT_SCALE_MAX,

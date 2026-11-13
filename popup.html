@@ -25,11 +25,22 @@
   <p id="status" class="note"></p>
 
   <section>
-    <strong>Google 翻譯</strong>
-    <p id="gtx-state" class="note"></p>
-    <p class="note warn">允許後，要翻譯的文字會送到 Google 伺服器。</p>
-    <button id="gtx-grant" hidden>允許使用</button>
-    <button id="gtx-revoke" hidden>撤銷權限</button>
+    <strong>翻譯引擎</strong>
+    <label class="radio">
+      <span>本機（離線，文字不離開電腦）</span>
+      <input type="radio" name="engine" value="local">
+    </label>
+    <p id="local-state" class="note"></p>
+    <label class="radio">
+      <span>Google 翻譯（線上）</span>
+      <input type="radio" name="engine" value="gtx">
+    </label>
+    <div id="gtx-section" hidden>
+      <p id="gtx-state" class="note"></p>
+      <p class="note warn">允許後，要翻譯的文字會送到 Google 伺服器。翻太多會被 Google 暫時限流。</p>
+      <button id="gtx-grant" hidden>允許使用</button>
+      <button id="gtx-revoke" hidden>撤銷權限</button>
+    </div>
   </section>
 
   <section>
