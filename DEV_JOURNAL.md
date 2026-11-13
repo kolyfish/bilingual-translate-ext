@@ -96,3 +96,5 @@ popup ──(storage.sync: enabled, position)──▶ content-index
 ## 變更紀錄
 - 2026-11-13：建立 MV3 骨架；實作網頁雙語對照（暗黃底）、YouTube 即時雙語字幕、彈窗開關；完成架構文件。
 - 2026-11-13：架構調整。`content.js` 拆為 shared / page / youtube / index 四個模組；設定改用 `storage.sync` 並新增譯文上下位置；翻譯加入 8 秒逾時與引擎登錄表；設定變更時整體重建。
+- 2026-11-13：專案搬到 `/Volumes/SSD 1T/IT/`，建立 git repo；`.gitignore` 排除 exFAT 產生的 `._*` 檔案。
+- 2026-11-13：新增 `SECURITY.md` 資安重新規劃（尚未實作）。重點是預設改用 Chrome 內建本機翻譯，權限從 `<all_urls>` 縮成 activeTab，並加上敏感網站黑名單。原因：個人自用時，最大風險是擴充自己把網銀、Email 頁面的文字送給第三方。
