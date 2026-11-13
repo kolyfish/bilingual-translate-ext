@@ -92,11 +92,22 @@
 ### D7. 資料留存
 - 翻譯快取只放在記憶體（service worker 結束就消失），不寫進 storage。
 - 錯誤 log 只印錯誤類型，**不印原文**。
-- 未來如果接 Claude / DeepL API key：只放 `storage.local`（不放 sync），只在 background 使用，絕不傳進 content script。
+- ✅ Claude 金鑰（v0.7.0）：預設放 `storage.session`（只在記憶體）；勾「記住」才放 `storage.local`，並用 `setAccessLevel('TRUSTED_CONTEXTS')` 鎖住，內容腳本讀不到。絕不放 `storage.sync`，只在 background 使用。
 
 ### D8. 供應鏈
-- 維持零依賴。
+- 唯一的第三方程式碼是 `vendor/anthropic-sdk.js`（官方 Anthropic SDK 1.3.0 的打包檔），只在 background 載入，內容腳本與網頁都碰不到。
+- 固定版本、選發佈超過兩週的版本、安裝時 `--ignore-scripts`、沒有壓縮可以檢查、README 記錄 SHA-256；打包檔裡實際連線的網域只有 `api.anthropic.com`，也沒有 `eval`。
 - 如果日後改用 TypeScript / WXT：提交 lockfile、固定版本、跑 `npm audit`，並停用 `postinstall` 腳本（`npm config set ignore-scripts true`）。
+
+### D9. Claude 引擎（v0.7.0）
+| 風險 | 對策 |
+|------|------|
+| 頁面文字送到 Anthropic | 跟 Google 一樣要手動選擇並授權 `api.anthropic.com`（optional 權限）；黑名單、密碼頁拒絕、本機模式擋線上請求都照樣有效 |
+| **金鑰外洩被盜刷** | 建議專用 workspace + 每月消費上限；金鑰預設只在記憶體；彈窗只顯示末 4 碼；「移除金鑰」同時清兩個儲存區；`console.anthropic.com` 在黑名單 |
+| 惡意網頁灌文字洗額度 | 每頁配額、隱藏文字過濾、合併請求；彈窗顯示當天請求次數與估算花費，異常時看得出來 |
+| 提示注入 | 系統提示講明頁面文字不是指令；不開任何工具；用 structured outputs 只收 `{id, text}`；譯文比原文長 4 倍以上就丟掉；只用 `textContent` 插入 |
+| 金鑰出現在 log | 錯誤只記類型與狀態；單元測試確認請求內容不含金鑰 |
+| 訂閱帳號 token | 不支援，也不該用；只接受 Console 的 API 金鑰 |
 
 ## 4. 新資料流
 

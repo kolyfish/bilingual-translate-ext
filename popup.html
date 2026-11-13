@@ -23,10 +23,43 @@
     <fieldset class="segmented">
       <legend class="visually-hidden">翻譯引擎</legend>
       <label><input type="radio" name="engine" value="local"><span>本機</span></label>
+      <label><input type="radio" name="engine" value="claude"><span>Claude</span></label>
       <label><input type="radio" name="engine" value="gtx"><span>Google</span></label>
     </fieldset>
     <p id="local-state" class="note"></p>
-    <div id="gtx-section" class="gtx" hidden>
+
+    <div id="claude-section" class="remote claude" hidden>
+      <fieldset class="segmented small">
+        <legend class="visually-hidden">Claude 模型</legend>
+        <label><input type="radio" name="claude-model" value="claude-opus-5-5"><span>Opus 5.5・品質</span></label>
+        <label><input type="radio" name="claude-model" value="claude-haiku-5-5"><span>Haiku 5.5・便宜</span></label>
+      </fieldset>
+
+      <div id="claude-key-empty">
+        <label class="field-label" for="claude-key">API 金鑰</label>
+        <input id="claude-key" class="text-input" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
+        <label class="check">
+          <input id="claude-remember" type="checkbox">
+          <span>記住金鑰（不勾的話，重開 Chrome 要重新貼）</span>
+        </label>
+        <div class="row-actions">
+          <button id="claude-save" class="secondary" type="button">儲存金鑰</button>
+        </div>
+      </div>
+
+      <div id="claude-key-saved" hidden>
+        <p class="key-line"><span id="claude-key-mask"></span><span id="claude-key-where" class="note inline"></span></p>
+        <div class="row-actions">
+          <button id="claude-test" class="secondary" type="button">測試金鑰</button>
+          <button id="claude-remove" class="quiet" type="button">移除金鑰</button>
+        </div>
+      </div>
+
+      <p id="claude-state" class="note" aria-live="polite"></p>
+      <p id="claude-usage" class="note"></p>
+      <p class="note warn">翻譯的文字會送到 Anthropic。建議在 Anthropic Console 為這個擴充開一把專用金鑰，並設定每月消費上限。</p>
+    </div>
+    <div id="gtx-section" class="remote gtx" hidden>
       <p id="gtx-state" class="note"></p>
       <p class="note warn">翻譯的文字會送到 Google 伺服器。短時間翻太多，Google 會暫時拒絕請求。</p>
       <div class="row-actions">

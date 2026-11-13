@@ -7,8 +7,9 @@
   const MIN_CHARS = 15
   // 注意: 必須與 background.js 的 MAX_TEXT_CHARS 一致，超過的段落不送出
   const MAX_TEXT_CHARS = 2000
-  // 決策: 線上引擎併發 4 避免被限流；本機引擎本來就依序處理，併發 1 避免佇列堆在模型裡
-  const CONCURRENCY = { gtx: 4, local: 1 }
+  // 決策: Google 併發 4 避免被限流；本機引擎本來就依序處理，併發 1 避免佇列堆在模型裡
+  // 決策: Claude 由 background 把同一頁的段落合併成一次請求，併發要夠大，一批才裝得滿
+  const CONCURRENCY = { gtx: 4, local: 1, claude: 16 }
   const THROTTLE_MS = 500
   const LANG_PAIR = { sourceLanguage: 'en', targetLanguage: 'zh-Hant' }
   // 同一種錯誤只提示一次，避免每段都洗 console

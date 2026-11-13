@@ -12,6 +12,7 @@
   --seal-text: #fff7f2;
   --jade: #3f7d5c;
   --amber: #b7791f;
+  --claude: #5b4bb7;
   --focus: #2b5fd9;
   --serif: 'Songti TC', 'STSong', 'Noto Serif TC', serif;
   --sans: 'PingFang TC', 'Heiti TC', 'Noto Sans TC', system-ui, sans-serif;
@@ -29,6 +30,7 @@
     --seal-text: #fff7f2;
     --jade: #6fb48f;
     --amber: #e0a94a;
+    --claude: #a597f0;
     --focus: #7aa2ff;
     color-scheme: dark;
   }
@@ -128,6 +130,10 @@ button {
 
 .chip[data-engine='gtx']::before {
   background: var(--amber);
+}
+
+.chip[data-engine='claude']::before {
+  background: var(--claude);
 }
 
 /* ---------- 主要動作 ---------- */
@@ -391,7 +397,8 @@ h2 {
   margin-top: 0;
 }
 
-.gtx {
+/* 線上引擎的設定區：左邊色條提醒「資料會送出電腦」 */
+.remote {
   margin-top: 10px;
   padding: 10px 12px;
   border-left: 3px solid var(--amber);
@@ -399,8 +406,69 @@ h2 {
   border-radius: 0 8px 8px 0;
 }
 
-.gtx .note:first-child {
+.remote.claude {
+  border-left-color: var(--claude);
+}
+
+.remote > .note:first-child {
   margin-top: 0;
+}
+
+.segmented.small span {
+  padding: 3px 0;
+  font-size: 12px;
+}
+
+.field-label {
+  display: block;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.text-input {
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 13px/1.4 ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.check input {
+  margin: 2px 0 0;
+  accent-color: var(--ink);
+}
+
+.key-line {
+  margin-top: 10px;
+  font: 13px/1.4 ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+.note.inline {
+  display: inline;
+  margin-left: 8px;
+  font-family: var(--sans);
+}
+
+.ok {
+  color: var(--jade);
+}
+
+.bad {
+  color: var(--seal);
 }
 
 /* ---------- 開關 ---------- */

@@ -7,10 +7,11 @@
 
 | 項目 | 內容 |
 |------|------|
-| 版本 | 0.6.0 |
+| 版本 | 0.7.0 |
 | 平台 | Google Chrome 138+（桌面版），開發環境為 Mac mini M4 + Chrome 157 |
 | 技術 | Manifest V3、原生 JavaScript、零第三方執行期依賴 |
-| 翻譯引擎 | **預設本機**：Chrome 內建 Translator API，文字不離開電腦；可改用 Google gtx（線上，需手動授權） |
+| 翻譯引擎 | **預設本機**：Chrome 內建 Translator API，文字不離開電腦；可改用 Claude（自己的 API 金鑰）或 Google gtx，都要手動授權 |
+| 第三方程式碼 | 只有 `vendor/anthropic-sdk.js`（官方 Anthropic SDK 1.3.0，打包成單一檔案，見 §4.4） |
 | 資安設計 | 見 [`SECURITY.md`](SECURITY.md) |
 | 設計決策與變更紀錄 | 見 [`DEV_JOURNAL.md`](DEV_JOURNAL.md) |
 
@@ -50,22 +51,40 @@
 | `!`（紅） | Google 模式還沒授權、瀏覽器不支援本機翻譯，或這一頁無法執行（例如 Chrome 線上應用程式商店） |
 
 ### 翻譯引擎
-| | 本機（預設） | Google（選用） |
-|---|---|---|
-| 技術 | Chrome 內建 Translator API（`en → zh-Hant`） | `translate.googleapis.com` gtx 端點 |
-| 資料去向 | **不離開電腦** | 送到 Google 伺服器 |
-| 網路 | 下載語言包之後可離線 | 需要網路 |
-| 限流 | 沒有 | 翻太多會被暫時限流 |
-| 首次使用 | 要在網頁上點一次「下載並翻譯」 | 要在彈窗授權 |
-| 速度 | 依序處理（併發 1） | 併發 4 |
+| | 本機（預設） | Claude（選用） | Google（選用） |
+|---|---|---|---|
+| 技術 | Chrome 內建 Translator API（`en → zh-Hant`） | 你自己的 Anthropic API 金鑰（Opus 5.5 / Haiku 5.5） | `translate.googleapis.com` gtx 端點 |
+| 資料去向 | **不離開電腦** | 送到 Anthropic | 送到 Google 伺服器 |
+| 費用 | 免費 | 依用量計費，彈窗顯示當天估算 | 免費 |
+| 品質 | 小模型 `[推測]` | 最好，會照語境用台灣用語 | 一般 |
+| 限流 | 沒有 | 依你帳號的額度 | 翻太多會被暫時限流 |
+| 首次使用 | 在網頁上點一次「下載並翻譯」 | 在彈窗貼金鑰並允許連線 | 在彈窗允許連線 |
+| 請求方式 | 依序處理（併發 1） | 同一頁的段落合併成一次請求 | 每段一次（併發 4） |
 
-- 兩個引擎不會自動切換。本機失敗時**不會**偷偷改用 Google，要你自己在彈窗切換
+- 引擎之間不會自動切換。本機失敗時**不會**偷偷改用線上引擎，要你自己在彈窗切換
 - 本機模式下，background 會拒絕所有線上翻譯請求，就算是切換前開的舊分頁送來的也一樣
+
+### Claude 引擎
+1. 到 Anthropic Console 建立 API 金鑰。**建議另開一個 workspace 給這個擴充，並設定每月消費上限**，金鑰萬一外洩，損失也有上限
+2. 彈窗 →「翻譯引擎」選 Claude → 貼上金鑰 → 「儲存金鑰」→ Chrome 跳出對話框時允許連到 `api.anthropic.com`
+3. 按「測試金鑰」確認可以用（查詢模型資訊，不會產生費用）
+
+| 項目 | 說明 |
+|---|---|
+| 模型 | Opus 5.5（預設，$4 / $20 每百萬 tokens）或 Haiku 5.5（$0.10 / $0.50）。一篇約 2,000 字的文章，Opus 大約 $0.07、Haiku 大約 $0.002 `[推測]` |
+| 金鑰存放 | 預設只存在記憶體（`storage.session`），重開 Chrome 就消失。勾「記住金鑰」才存到 `storage.local`，而且鎖成只有擴充本身讀得到，網頁上的內容腳本讀不到 |
+| 金鑰顯示 | 存好後只顯示 `sk-ant-…` 加末 4 碼 |
+| 請求設定 | `effort: low`；用 structured outputs 取回 JSON；Opus 開啟伺服器端拒答備援（`fallbacks: "default"`），Haiku 沒有這個功能所以不帶 |
+| 提示注入防護 | 系統提示明講頁面文字是要翻譯的資料，不是指令；譯文比原文長 4 倍以上就丟掉；譯文一律用 `textContent` 插入 |
+| 用量 | 每次請求後記下當天次數與估算花費。實際費用以 Console 為準，啟用備援模型時費率可能不同 |
+| YouTube | 字幕一次一句，無法合併請求，長片費用會比較高。用 Opus 一小時約 $3–4 `[推測]`，看 YouTube 建議切 Haiku |
 
 ### 彈窗設定
 | 設定 | 預設 | 範圍 / 選項 | 存放位置 |
 |------|------|-------------|----------|
-| 翻譯引擎 | 本機 | 本機 / Google | `storage.sync` |
+| 翻譯引擎 | 本機 | 本機 / Claude / Google | `storage.sync` |
+| Claude 模型 | Opus 5.5 | Opus 5.5 / Haiku 5.5 | `storage.sync` |
+| Claude 金鑰 | 無 | — | `storage.session`，勾「記住」才放 `storage.local` |
 | 底色 | 深紅 `#8b1a1a` | 任意 `#rrggbb` | `storage.sync` |
 | 字級 | 95% | 70%–160% | `storage.sync` |
 | 網頁譯文位置 | 英文下方 | 下方 / 上方 | `storage.sync` |
@@ -93,6 +112,10 @@ bilingual-translate-ext/
 ├── popup.html / .css / .js  # 工具列彈窗
 ├── icons/               # 朱砂印圖示 16 / 32 / 48 / 128
 ├── docs/                # README 用的截圖
+├── vendor/
+│   └── anthropic-sdk.js # 官方 Anthropic SDK 1.3.0 打包檔（只給 background 用）
+├── scripts/
+│   └── build-vendor.sh  # 重新產生 vendor/anthropic-sdk.js
 ├── tests/
 │   ├── unit-background.js   # 黑名單、引擎限制、訊息驗證單元測試（不需任何套件）
 │   └── e2e.js               # Playwright + Chromium 端對端測試
@@ -209,7 +232,7 @@ popup → storage.sync → content-index onChanged
 node tests/unit-background.js
 ```
 
-**端對端測試**（63 項；需要 Playwright 和它附的 Chromium）
+**端對端測試**（79 項；需要 Playwright 和它附的 Chromium）
 ```bash
 PLAYWRIGHT_PATH=/path/to/node_modules/playwright node tests/e2e.js
 ```
@@ -226,6 +249,20 @@ e2e 的做法：
 - **真的語言包下載**：Chromium 的內容腳本有 `Translator` API，也會回報 `downloadable`，但無頭模式下載一直不會完成（試過拿掉 `--disable-component-update` 也一樣）
 - 真實 YouTube 的 DOM 結構（e2e 用的是仿造頁面）
 - 在品牌版 Google Chrome 上的表現
+- 真的 Claude API 呼叫：e2e 換掉了 SDK client，避免花錢也避免依賴網路。另外用真的 SDK 加攔截過的 `fetch` 確認過送出的網址、標頭與內容（SDK 1.x 把 API 金鑰放在 `Authorization: Bearer`，這是官方 SDK 的設計）
+
+### 4.4 第三方程式碼（vendor）
+`vendor/anthropic-sdk.js` 是官方 `@anthropic-ai/sdk` **1.3.0** 用 esbuild 0.28.2 打包成的單一 IIFE 檔，沒有壓縮，可以直接打開檢查。
+
+- 固定版本，而且選發佈超過兩週的版本
+- 安裝時加 `--ignore-scripts`，不執行套件的安裝腳本
+- 打包檔裡實際連線的網域只有 `api.anthropic.com`，沒有 `eval` 或 `new Function`
+- SHA-256：`de28b18dc802fbf5b91a2cce6a19237699c804b48f1a7acb6590513e06a70c90`
+
+重新產生（升級時把腳本裡的版本號改掉，再更新上面的 SHA-256）：
+```bash
+./scripts/build-vendor.sh
+```
 
 ---
 
@@ -237,6 +274,8 @@ e2e 的做法：
 | 下載一直停在 0% | 網路問題，或 Chrome 元件更新被公司政策或防火牆擋住 | 等一下再試；不行就在彈窗改用 Google |
 | 徽章 `!`（本機模式） | 這個 Chrome 不支援本機英翻繁中 | 更新 Chrome，或在彈窗改用 Google |
 | 徽章 `!`（Google 模式） | 還沒允許 Google 翻譯 | 彈窗 →「允許使用」 |
+| 徽章 `!`（Claude 模式） | 沒有金鑰，或沒允許連到 Anthropic | 彈窗貼上金鑰並儲存；重開 Chrome 後沒勾「記住」的金鑰要重貼 |
+| Claude 模式翻不出來 | 金鑰無效、額度用完或被限流 | 彈窗按「測試金鑰」看原因；到 Console 檢查額度 |
 | Google 模式有 `ON` 但譯文不出現 | **Google 限流**：請求被 302 轉到 `google.com/sorry` | 等幾個小時，或改回本機引擎 |
 | 本機翻譯品質不理想 | 本機模型比線上小 `[推測]` | 需要時改用 Google |
 | 某個網站一直 `✕` | 在內建黑名單、網域含 `bank`，或頁面有密碼欄位 | 這是刻意的設計，見 `SECURITY.md` |
@@ -257,4 +296,6 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST 'https://translate.googleapis.c
 | Phase 1 | 權限最小化、黑名單、訊息驗證、log 清理 | ✅ v0.3.0 |
 | — | 底色、字級可調；YouTube 雙語框重做 | ✅ v0.4.0 |
 | Phase 2 | Chrome 內建 Translator API（本機離線，文字不出機器），gtx 降為選用 | ✅ v0.5.0（真的語言包下載待在 Chrome 上驗證） |
+| — | 介面重新設計、朱砂印圖示 | ✅ v0.6.0 |
+| — | Claude 引擎（自己的 API 金鑰） | ✅ v0.7.0（真的 API 呼叫待你用自己的金鑰驗證） |
 | Phase 3 | 擴充搬到內建 APFS 磁碟、譯文改用 Shadow DOM（選做） | 規劃中 |

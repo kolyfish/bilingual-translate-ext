@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "雙語對照翻譯",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "點擊或 Alt+A 才翻譯目前分頁；YouTube 英文 CC 即時加中文字幕",
   "permissions": ["storage", "activeTab", "scripting"],
-  "optional_host_permissions": ["https://translate.googleapis.com/*"],
+  "optional_host_permissions": ["https://translate.googleapis.com/*", "https://api.anthropic.com/*"],
   "background": {
     "service_worker": "background.js"
   },

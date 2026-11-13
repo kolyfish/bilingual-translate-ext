@@ -5,10 +5,21 @@
 (() => {
   if (globalThis.BT_SETTINGS) return
 
+  // 'local' = Chrome 內建 Translator API（文字不離開電腦）
+  // 'claude' = 使用者自己的 Anthropic API 金鑰；'gtx' = Google 線上翻譯
+  const ENGINES = ['local', 'claude', 'gtx']
+
+  // 價格單位：美元 / 百萬 tokens，只用來在彈窗估算當日花費
+  // 注意: 價格會變，以 Anthropic 官方價目為準；fallback 到其他模型時實際費率可能不同
+  const CLAUDE_MODELS = {
+    'claude-opus-5-5': { label: 'Opus 5.5', note: '品質最好', input: 4, output: 20 },
+    'claude-haiku-5-5': { label: 'Haiku 5.5', note: '便宜、快', input: 0.1, output: 0.5 }
+  }
+
   const DEFAULTS = {
-    // 'local' = Chrome 內建 Translator API（文字不離開電腦）；'gtx' = Google 線上翻譯
-    // 決策: 預設本機，Google 要使用者主動切換並授權
+    // 決策: 預設本機，線上引擎都要使用者主動切換並授權
     engine: 'local',
+    claudeModel: 'claude-opus-5-5',
     position: 'below',
     youtubeAuto: false,
     bgColor: '#8b1a1a', // 深紅
@@ -25,8 +36,9 @@
     const s = { ...DEFAULTS, ...raw }
     const scale = Number(s.fontScale)
     return {
-      // 資安: 只有明確寫 'gtx' 才用線上引擎，其他任何值都退回本機
-      engine: s.engine === 'gtx' ? 'gtx' : 'local',
+      // 資安: 只接受已知的引擎名稱，其他任何值都退回本機
+      engine: ENGINES.includes(s.engine) ? s.engine : 'local',
+      claudeModel: Object.hasOwn(CLAUDE_MODELS, s.claudeModel) ? s.claudeModel : DEFAULTS.claudeModel,
       position: s.position === 'above' ? 'above' : 'below',
       youtubeAuto: s.youtubeAuto === true,
       bgColor: HEX_COLOR_RE.test(s.bgColor) ? s.bgColor.toLowerCase() : DEFAULTS.bgColor,
@@ -68,6 +80,8 @@
 
   globalThis.BT_SETTINGS = {
     DEFAULTS,
+    ENGINES,
+    CLAUDE_MODELS,
     FONT_SCALE_MIN,
     FONT_SCALE_MAX,
     sanitize,

@@ -19,11 +19,13 @@ function buildCopy(name, mutateManifest) {
   for (const f of fs.readdirSync(ROOT)) {
     if (!f.startsWith('._') && /\.(js|css|html|json)$/.test(f)) fs.copyFileSync(path.join(ROOT, f), path.join(dir, f))
   }
-  // manifest 引用了 icons/，少了會讓擴充載入失敗
-  fs.cpSync(path.join(ROOT, 'icons'), path.join(dir, 'icons'), {
-    recursive: true,
-    filter: (src) => !path.basename(src).startsWith('._')
-  })
+  // manifest 引用了 icons/、background 載入 vendor/，少了會讓擴充載入失敗
+  for (const sub of ['icons', 'vendor']) {
+    fs.cpSync(path.join(ROOT, sub), path.join(dir, sub), {
+      recursive: true,
+      filter: (src) => !path.basename(src).startsWith('._')
+    })
+  }
   const manifestPath = path.join(dir, 'manifest.json')
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
   mutateManifest(manifest)
@@ -158,7 +160,7 @@ async function suiteB() {
   // 決策: 換成假翻譯引擎。真 gtx 已經因為測試次數太多被 Google 限流，而且測試不該依賴外部服務
   await sw.evaluate(() => {
     self.__calls = []
-    REMOTE_PROVIDER.translate = async (t) => {
+    REMOTE_ENGINES.gtx.translate = async (t) => {
       self.__calls.push(t)
       return `測試譯文：${t}`
     }
@@ -354,6 +356,94 @@ async function suiteB() {
     check('按取消後提示條消失、沒有譯文', (await cp.locator('.bt-zh').count()) === 0)
     await cp.waitForFunction(() => true)
     check('按取消後徽章清空', (await badge(sw, cancelUrl)) === '')
+
+    console.log('\n— Claude 引擎 —')
+    // 決策: 換掉 SDK client，不打真的 API；但請求參數、合併、金鑰讀取都走正式程式碼
+    await sw.evaluate(() => {
+      self.__claudeReqs = []
+      claude.clientKey = null
+      claude.createClient = (apiKey) => ({
+        beta: {
+          messages: {
+            create: async (params) => {
+              self.__claudeReqs.push({ params, apiKey })
+              const { segments } = JSON.parse(params.messages[0].content)
+              return {
+                stop_reason: 'end_turn',
+                usage: { input_tokens: 800, output_tokens: 400 },
+                content: [{ type: 'text', text: JSON.stringify({ translations: segments.map((s) => ({ id: s.id, text: `Claude譯：${s.text}` })) }) }]
+              }
+            }
+          }
+        },
+        models: { retrieve: async () => ({ id: 'claude-opus-5-5' }) }
+      })
+      return chrome.storage.sync.set({ engine: 'claude' })
+    })
+    const claudeCount = () => sw.evaluate(() => self.__claudeReqs.length)
+
+    const cUrl = 'https://article.test/?claude'
+    const cpage = await openPage(context, cUrl)
+    check('Claude 模式沒有金鑰 → no-key', (await toggle(sw, cUrl)) === 'no-key')
+    check('沒有金鑰時徽章顯示 !', (await badge(sw, cUrl)) === '!')
+
+    await sw.evaluate(() => chrome.storage.session.set({ claudeApiKey: 'sk-ant-e2e-test-key-000000000000wxyz' }))
+    const remoteBeforeClaude = await callCount()
+    check('有金鑰 → started', (await toggle(sw, cUrl)) === 'started')
+    await cpage.waitForSelector('#p1 + .bt-zh')
+    await cpage.waitForSelector('#td1 > .bt-zh')
+    const cZh = await cpage.locator('#p1 + .bt-zh').textContent()
+    check('譯文來自 Claude', cZh.startsWith('Claude譯：'), cZh)
+    const translatedCount = await cpage.locator('.bt-zh').count()
+    const reqs = await claudeCount()
+    check('多個段落合併成較少的請求', reqs < translatedCount, `${translatedCount} 段 → ${reqs} 次請求`)
+    const firstReq = await sw.evaluate(() => self.__claudeReqs[0])
+    check('請求用 Opus 5.5 + 拒答備援 + low effort', firstReq.params.model === 'claude-opus-5-5' && firstReq.params.fallbacks === 'default' && firstReq.params.output_config.effort === 'low')
+    check('金鑰從 storage.session 讀取', firstReq.apiKey === 'sk-ant-e2e-test-key-000000000000wxyz')
+    check('Claude 模式沒有呼叫 Google', (await callCount()) === remoteBeforeClaude)
+
+    const contentRead = await sw.evaluate(async (target) => {
+      const tab = (await chrome.tabs.query({})).find((t) => t.url === target)
+      await chrome.storage.local.set({ claudeApiKey: 'sk-ant-should-not-leak-0000000000000' })
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: async () => {
+          try {
+            const got = await chrome.storage.local.get('claudeApiKey')
+            return got.claudeApiKey ? 'leaked' : 'empty'
+          } catch (err) {
+            return 'blocked'
+          }
+        }
+      })
+      await chrome.storage.local.remove('claudeApiKey')
+      return result
+    }, cUrl)
+    check('內容腳本讀不到 storage.local 裡的金鑰', contentRead === 'blocked', contentRead)
+
+    const usage = await sw.evaluate(() => chrome.storage.local.get('claudeUsage'))
+    check('有記錄當天用量', usage.claudeUsage?.requests === reqs, JSON.stringify(usage.claudeUsage))
+    await toggle(sw, cUrl)
+
+    const cp2 = await openPage(context, `chrome-extension://${new URL(sw.url()).host}/popup.html`)
+    await cp2.waitForFunction(() => !document.getElementById('claude-key-saved').hidden)
+    check('彈窗顯示 Claude 設定區', await cp2.locator('#claude-section').isVisible())
+    const mask = await cp2.locator('#claude-key-mask').textContent()
+    check('彈窗只顯示金鑰末 4 碼', mask === 'sk-ant-…wxyz', mask)
+    check('彈窗頁面裡沒有完整金鑰', !(await cp2.content()).includes('sk-ant-e2e-test-key'))
+    await cp2.getByRole('button', { name: '測試金鑰' }).click()
+    await cp2.waitForFunction(() => /可以使用/.test(document.getElementById('claude-state').textContent))
+    check('測試金鑰按鈕可用', true)
+    check('彈窗顯示今天用量', /今天 \d+ 次請求/.test(await cp2.locator('#claude-usage').textContent()))
+    await cp2.getByRole('button', { name: '移除金鑰' }).click()
+    await cp2.waitForFunction(() => !document.getElementById('claude-key-empty').hidden)
+    const left = await sw.evaluate(async () => ({
+      ...(await chrome.storage.session.get('claudeApiKey')),
+      ...(await chrome.storage.local.get('claudeApiKey'))
+    }))
+    check('移除金鑰後兩個儲存區都清空', !left.claudeApiKey)
+    await cp2.close()
+    await sw.evaluate(() => chrome.storage.sync.set({ engine: 'local' }))
   } finally {
     await context.close()
   }

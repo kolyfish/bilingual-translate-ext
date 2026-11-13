@@ -127,3 +127,14 @@ popup → storage.sync → onChanged → 外觀即時套用 / 位置重建 / You
   - 踩坑：`all: unset` 的重設規則 `.bt-banner-actions button` 權重 (0,1,1) 比 `.bt-banner-go` 高，把按鈕底色洗掉了，改成 `.bt-banner .bt-banner-go`。
   - 踩坑：`.note { display: block }` 會蓋掉 `hidden` 屬性，彈窗加上 `[hidden] { display: none !important }`。
   - 彈窗收合時約 600px，剛好在 Chrome 彈窗的高度上限附近；之後再加設定要注意會出現捲軸。
+- 2026-11-13：v0.7.0，Claude 引擎。
+  - 使用者用自己的 Anthropic API 金鑰；Opus 5.5（預設）或 Haiku 5.5，由使用者選。不能用 Claude 訂閱的登入 token。
+  - 用官方 SDK，不手刻 HTTP。SDK 用 esbuild 打包成 IIFE 放在 `vendor/`，讓 classic service worker 用 `importScripts` 載入；固定 1.3.0（發佈超過兩週）、`--ignore-scripts`、記錄 SHA-256。取捨：放棄「零依賴」，換來官方的錯誤類別、重試與請求格式。
+  - 同一頁 150ms 內的段落合併成一次請求（最多 16 段或 8,000 字），用 structured outputs 取回 `{id, text}` 陣列。內容腳本的 Claude 併發開到 16，一批才裝得滿。
+  - `effort: low`；Opus 開 `fallbacks: "default"`（拒答時由伺服器改用備援模型），Haiku 5.5 沒有伺服器端備援，所以不帶。
+  - 金鑰：預設 `storage.session`（只在記憶體），勾「記住」才放 `storage.local`；`storage.local` 用 `setAccessLevel('TRUSTED_CONTEXTS')` 鎖住，內容腳本讀不到（e2e 實測回 blocked）。彈窗只顯示末 4 碼。
+  - 提示注入：系統提示講明頁面文字不是指令；譯文比原文長 4 倍以上就丟掉；`console.anthropic.com` 加進黑名單。
+  - 每次請求記下當天次數與估算花費，顯示在彈窗；「測試金鑰」用 `models.retrieve`，不花錢。
+  - 快取鍵加上引擎與模型，切換後不會拿到別的引擎的結果。
+  - 踩坑：SDK 1.x 的 `apiKeyAuth` 把金鑰放在 `Authorization: Bearer`，不是舊版的 `x-api-key`。用真的 SDK 加攔截 `fetch` 確認過，這是官方設計。
+  - 測試：單元測試加 Claude 情境；e2e 79 項（假 SDK client），另外用真的 SDK 加假 `fetch` 驗證請求格式。真的 API 呼叫還沒用真金鑰跑過。
