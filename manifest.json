@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "雙語對照翻譯",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "點擊或 Alt+A 才翻譯目前分頁；YouTube 英文 CC 即時加中文字幕",
   "permissions": ["storage", "activeTab", "scripting"],
   "optional_host_permissions": ["https://translate.googleapis.com/*"],
@@ -22,8 +22,18 @@
       "description": "翻譯 / 還原目前分頁"
     }
   },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "雙語對照翻譯"
+    "default_title": "雙語對照翻譯",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
   }
 }

@@ -2,84 +2,95 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
-  <style>
-    body { width: 280px; margin: 0; padding: 12px; font-family: system-ui, sans-serif; font-size: 14px; }
-    button { font-size: 13px; cursor: pointer; }
-    #toggle-page { width: 100%; padding: 8px; font-size: 14px; }
-    label { display: flex; justify-content: space-between; align-items: center; margin: 10px 0; }
-    section { border-top: 1px solid #ddd; margin-top: 12px; padding-top: 10px; }
-    textarea { width: 100%; box-sizing: border-box; height: 80px; font-size: 12px; font-family: ui-monospace, monospace; }
-    .note { margin: 6px 0 0; font-size: 12px; color: #666; line-height: 1.5; }
-    .warn { color: #b26a00; }
-    #status { min-height: 1.5em; }
-    input[type="range"] { flex: 1; margin: 0 8px; }
-    #preview {
-      margin-top: 8px; padding: 4px 8px; border-radius: 4px;
-      background: var(--bt-bg); color: var(--bt-fg);
-      font-size: calc(var(--bt-scale) * 14px); line-height: 1.6;
-    }
-  </style>
+  <title>雙語對照</title>
+  <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <button id="toggle-page">翻譯此頁 / 還原（Alt+A）</button>
-  <p id="status" class="note"></p>
+  <header class="masthead">
+    <span class="seal" aria-hidden="true">譯</span>
+    <h1>雙語對照</h1>
+    <span id="engine-chip" class="chip" data-engine="local">本機</span>
+  </header>
 
-  <section>
-    <strong>翻譯引擎</strong>
-    <label class="radio">
-      <span>本機（離線，文字不離開電腦）</span>
-      <input type="radio" name="engine" value="local">
-    </label>
+  <button id="toggle-page" class="primary" type="button">
+    <span>翻譯這一頁</span>
+    <kbd>⌥A</kbd>
+  </button>
+  <p id="status" class="status" aria-live="polite"></p>
+
+  <section aria-labelledby="engine-heading">
+    <h2 id="engine-heading">翻譯引擎</h2>
+    <fieldset class="segmented">
+      <legend class="visually-hidden">翻譯引擎</legend>
+      <label><input type="radio" name="engine" value="local"><span>本機</span></label>
+      <label><input type="radio" name="engine" value="gtx"><span>Google</span></label>
+    </fieldset>
     <p id="local-state" class="note"></p>
-    <label class="radio">
-      <span>Google 翻譯（線上）</span>
-      <input type="radio" name="engine" value="gtx">
-    </label>
-    <div id="gtx-section" hidden>
+    <div id="gtx-section" class="gtx" hidden>
       <p id="gtx-state" class="note"></p>
-      <p class="note warn">允許後，要翻譯的文字會送到 Google 伺服器。翻太多會被 Google 暫時限流。</p>
-      <button id="gtx-grant" hidden>允許使用</button>
-      <button id="gtx-revoke" hidden>撤銷權限</button>
+      <p class="note warn">翻譯的文字會送到 Google 伺服器。短時間翻太多，Google 會暫時拒絕請求。</p>
+      <div class="row-actions">
+        <button id="gtx-grant" class="secondary" type="button" hidden>允許連到 Google</button>
+        <button id="gtx-revoke" class="quiet" type="button" hidden>撤銷權限</button>
+      </div>
     </div>
   </section>
 
-  <section>
-    <strong>譯文外觀</strong>
-    <label>
-      底色
-      <input type="color" id="bg-color">
-    </label>
-    <label>
-      字級
+  <section aria-labelledby="look-heading">
+    <div class="heading-row">
+      <h2 id="look-heading">譯文外觀</h2>
+      <button id="reset-appearance" class="quiet" type="button">恢復預設</button>
+    </div>
+    <!-- 決策: 預覽做成真正的「英文一行、中文一行」，跟網頁上看到的一樣 -->
+    <div class="sample">
+      <p class="sample-en">Reading in two languages, one line at a time.</p>
+      <p id="preview">一次一行，用兩種語言閱讀。</p>
+    </div>
+
+    <div class="swatches" role="group" aria-label="底色">
+      <button type="button" class="swatch" data-color="#8b1a1a" style="--c:#8b1a1a" aria-label="深紅"></button>
+      <button type="button" class="swatch" data-color="#2f5d50" style="--c:#2f5d50" aria-label="墨綠"></button>
+      <button type="button" class="swatch" data-color="#2b3f6b" style="--c:#2b3f6b" aria-label="靛藍"></button>
+      <button type="button" class="swatch" data-color="#7a6500" style="--c:#7a6500" aria-label="暗黃"></button>
+      <button type="button" class="swatch" data-color="#fde68a" style="--c:#fde68a" aria-label="淺黃"></button>
+      <label class="swatch custom" title="自訂顏色">
+        <input type="color" id="bg-color" aria-label="自訂底色">
+      </label>
+    </div>
+
+    <div class="field">
+      <label for="font-scale">字級</label>
       <input type="range" id="font-scale" step="5">
-      <span id="font-scale-value"></span>
-    </label>
-    <div id="preview">這是譯文預覽，文字顏色會依底色自動調整。</div>
-    <p class="note"><button id="reset-appearance">恢復預設（深紅、95%）</button></p>
+      <output id="font-scale-value" for="font-scale"></output>
+    </div>
   </section>
 
-  <section>
-    <label>
-      網頁譯文位置
-      <select id="position">
-        <option value="below">英文下方</option>
-        <option value="above">英文上方</option>
-      </select>
+  <section aria-labelledby="place-heading">
+    <h2 id="place-heading">顯示位置</h2>
+    <fieldset class="segmented">
+      <legend class="visually-hidden">網頁譯文位置</legend>
+      <label><input type="radio" name="position" value="below"><span>英文下方</span></label>
+      <label><input type="radio" name="position" value="above"><span>英文上方</span></label>
+    </fieldset>
+
+    <label class="switch-row">
+      <span>
+        <span class="switch-title">YouTube 自動雙語字幕</span>
+        <span class="note">影片要先開啟英文 CC</span>
+      </span>
+      <input type="checkbox" id="youtube-auto" role="switch">
     </label>
-    <label>
-      YouTube 自動雙語字幕
-      <input type="checkbox" id="youtube-auto">
-    </label>
-    <p class="note">YouTube 需先開啟英文 CC 字幕。</p>
   </section>
 
-  <section>
-    <strong>自訂黑名單</strong>
-    <p class="note">一行一個網域，含子網域。網銀、Email、支付、密碼管理器已經內建。</p>
-    <textarea id="denylist" placeholder="example.com"></textarea>
-    <button id="save-denylist">儲存</button>
-    <span id="denylist-status" class="note"></span>
-  </section>
+  <details class="denylist">
+    <summary>不要翻譯的網站</summary>
+    <p class="note">一行一個網域，子網域也會擋。網銀、Email、支付、密碼管理器已經內建。</p>
+    <textarea id="denylist" placeholder="example.com" spellcheck="false"></textarea>
+    <div class="row-actions">
+      <button id="save-denylist" class="secondary" type="button">儲存清單</button>
+      <span id="denylist-status" class="note" aria-live="polite"></span>
+    </div>
+  </details>
 
   <script src="settings.js"></script>
   <script src="popup.js"></script>

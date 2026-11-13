@@ -7,12 +7,16 @@
 
 | 項目 | 內容 |
 |------|------|
-| 版本 | 0.5.0 |
+| 版本 | 0.6.0 |
 | 平台 | Google Chrome 138+（桌面版），開發環境為 Mac mini M4 + Chrome 157 |
 | 技術 | Manifest V3、原生 JavaScript、零第三方執行期依賴 |
 | 翻譯引擎 | **預設本機**：Chrome 內建 Translator API，文字不離開電腦；可改用 Google gtx（線上，需手動授權） |
 | 資安設計 | 見 [`SECURITY.md`](SECURITY.md) |
 | 設計決策與變更紀錄 | 見 [`DEV_JOURNAL.md`](DEV_JOURNAL.md) |
+
+| 設定彈窗 | 深色模式 | 網頁對照 |
+|---|---|---|
+| <img src="docs/popup-light.png" width="240" alt="設定彈窗"> | <img src="docs/popup-dark.png" width="240" alt="設定彈窗深色模式"> | <img src="docs/article.png" width="300" alt="英文段落下方插入中文譯文"><br><br><img src="docs/banner.png" width="300" alt="本機語言包下載提示"> |
 
 ---
 
@@ -85,8 +89,10 @@ bilingual-translate-ext/
 ├── content-page.js      # 網頁模式：找文字塊、懶翻譯、插入譯文
 ├── content-youtube.js   # YouTube 模式：讀 CC、畫雙語字幕框
 ├── content-index.js     # 入口：toggle()、引擎檢查、語言包下載提示條、啟停、設定監聽
-├── style.css            # 譯文樣式（全部走 CSS 變數）
-├── popup.html / .js     # 工具列彈窗
+├── style.css            # 注入頁面的樣式：譯文、YouTube 雙語框、下載提示條
+├── popup.html / .css / .js  # 工具列彈窗
+├── icons/               # 朱砂印圖示 16 / 32 / 48 / 128
+├── docs/                # README 用的截圖
 ├── tests/
 │   ├── unit-background.js   # 黑名單、引擎限制、訊息驗證單元測試（不需任何套件）
 │   └── e2e.js               # Playwright + Chromium 端對端測試

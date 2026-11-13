@@ -19,6 +19,11 @@ function buildCopy(name, mutateManifest) {
   for (const f of fs.readdirSync(ROOT)) {
     if (!f.startsWith('._') && /\.(js|css|html|json)$/.test(f)) fs.copyFileSync(path.join(ROOT, f), path.join(dir, f))
   }
+  // manifest 引用了 icons/，少了會讓擴充載入失敗
+  fs.cpSync(path.join(ROOT, 'icons'), path.join(dir, 'icons'), {
+    recursive: true,
+    filter: (src) => !path.basename(src).startsWith('._')
+  })
   const manifestPath = path.join(dir, 'manifest.json')
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
   mutateManifest(manifest)

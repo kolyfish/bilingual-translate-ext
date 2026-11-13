@@ -6,24 +6,26 @@ const LANG_PAIR = { sourceLanguage: 'en', targetLanguage: 'zh-Hant' }
 const HOSTNAME_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/
 
 const STATUS_TEXT = {
-  started: '已開始翻譯此頁',
-  stopped: '已還原',
-  blocked: '此頁有密碼欄位，已拒絕翻譯',
-  denied: '敏感網站或不支援的頁面，已拒絕翻譯',
-  'no-permission': '請先在下方允許使用 Google 翻譯',
-  'needs-download': '第一次使用本機翻譯：請按網頁右下角的「下載並翻譯」',
-  'local-unavailable': '這個瀏覽器不支援本機英翻繁中，可改用 Google 翻譯',
-  error: '無法在此頁執行'
+  started: '正在翻譯這一頁。再按一次可以還原。',
+  stopped: '已還原成原文。',
+  blocked: '這一頁有密碼欄位，為了安全不翻譯。',
+  denied: '這個網站在不翻譯清單上，或是 Chrome 不允許擴充在這裡執行。',
+  'no-permission': '要先允許連到 Google，才能用 Google 翻譯。',
+  'needs-download': '第一次使用：請按網頁右下角的「下載並翻譯」。',
+  'local-unavailable': '這個 Chrome 不支援本機英翻繁中，可以改用 Google。',
+  error: '這一頁無法翻譯。'
 }
 
 const LOCAL_STATE_TEXT = {
-  available: '語言包已就緒，可離線翻譯',
-  downloadable: '尚未下載語言包：在英文網頁按 Alt+A，右下角會出現下載按鈕',
-  downloading: '語言包下載中…',
-  unavailable: '這個瀏覽器不支援英翻繁中',
+  available: '語言包已下載，可以離線翻譯，文字不會離開電腦。',
+  downloadable: '還沒下載語言包，在英文網頁按 ⌥A 開始。',
+  downloading: '語言包下載中。',
+  unavailable: '這個 Chrome 不支援英翻繁中。',
   // 注意: 彈窗不一定有 Translator API，偵測不到不代表網頁上不能用
-  unsupported: '彈窗內無法偵測，請直接在網頁上按 Alt+A 試試'
+  unsupported: '文字在電腦上翻譯，不會送出去。'
 }
+
+const ENGINE_LABEL = { local: '本機', gtx: 'Google' }
 
 const $ = (id) => document.getElementById(id)
 
@@ -35,6 +37,13 @@ async function refreshLocal() {
 function showEngine(engine) {
   for (const radio of document.querySelectorAll('input[name="engine"]')) radio.checked = radio.value === engine
   $('gtx-section').hidden = engine !== 'gtx'
+  $('local-state').hidden = engine !== 'local'
+  $('engine-chip').dataset.engine = engine
+  $('engine-chip').textContent = ENGINE_LABEL[engine]
+}
+
+function checkRadio(name, value) {
+  for (const radio of document.querySelectorAll(`input[name="${name}"]`)) radio.checked = radio.value === value
 }
 
 for (const radio of document.querySelectorAll('input[name="engine"]')) {
@@ -47,7 +56,7 @@ for (const radio of document.querySelectorAll('input[name="engine"]')) {
 
 async function refreshGtx() {
   const granted = await chrome.permissions.contains(GTX_PERMISSION)
-  $('gtx-state').textContent = granted ? '狀態：已允許' : '狀態：未允許（翻譯功能無法使用）'
+  $('gtx-state').textContent = granted ? '已允許連到 Google。' : '還沒允許連到 Google，現在無法用 Google 翻譯。'
   $('gtx-grant').hidden = granted
   $('gtx-revoke').hidden = !granted
 }
@@ -57,6 +66,24 @@ function renderAppearance() {
   const draft = Settings.sanitize({ bgColor: $('bg-color').value, fontScale: $('font-scale').value })
   Settings.applyTo($('preview'), draft)
   $('font-scale-value').textContent = `${draft.fontScale}%`
+  // 標出目前選中的色票；不在預設色票裡的顏色，標在「自訂」上
+  let matched = false
+  for (const swatch of document.querySelectorAll('.swatch[data-color]')) {
+    const on = swatch.dataset.color === draft.bgColor
+    swatch.setAttribute('aria-pressed', String(on))
+    matched ||= on
+  }
+  document.querySelector('.swatch.custom').dataset.active = String(!matched)
+}
+
+const saveColor = (hex) => chrome.storage.sync.set({ bgColor: Settings.sanitize({ bgColor: hex }).bgColor })
+
+for (const swatch of document.querySelectorAll('.swatch[data-color]')) {
+  swatch.addEventListener('click', () => {
+    $('bg-color').value = swatch.dataset.color
+    renderAppearance()
+    saveColor(swatch.dataset.color)
+  })
 }
 
 function fillAppearance(settings) {
@@ -84,9 +111,7 @@ $('gtx-revoke').addEventListener('click', () => {
 // 原因: storage.sync 每分鐘最多寫 120 次，拖動滑桿或色盤會連續觸發，很快就超過
 $('bg-color').addEventListener('input', renderAppearance)
 $('font-scale').addEventListener('input', renderAppearance)
-$('bg-color').addEventListener('change', () => {
-  chrome.storage.sync.set({ bgColor: Settings.sanitize({ bgColor: $('bg-color').value }).bgColor })
-})
+$('bg-color').addEventListener('change', () => saveColor($('bg-color').value))
 $('font-scale').addEventListener('change', () => {
   chrome.storage.sync.set({ fontScale: Settings.sanitize({ fontScale: $('font-scale').value }).fontScale })
 })
@@ -97,9 +122,11 @@ $('reset-appearance').addEventListener('click', () => {
   fillAppearance(Settings.DEFAULTS)
 })
 
-$('position').addEventListener('change', () => {
-  chrome.storage.sync.set({ position: $('position').value })
-})
+for (const radio of document.querySelectorAll('input[name="position"]')) {
+  radio.addEventListener('change', () => {
+    chrome.storage.sync.set({ position: Settings.sanitize({ position: radio.value }).position })
+  })
+}
 
 $('youtube-auto').addEventListener('change', () => {
   chrome.storage.sync.set({ youtubeAuto: $('youtube-auto').checked })
@@ -112,7 +139,7 @@ $('save-denylist').addEventListener('click', async () => {
   const invalid = lines.filter((s) => !HOSTNAME_RE.test(s))
   await chrome.storage.local.set({ denylistExtra: valid })
   $('denylist').value = valid.join('\n')
-  $('denylist-status').textContent = invalid.length > 0 ? `已儲存，忽略無效項：${invalid.join(', ')}` : '已儲存'
+  $('denylist-status').textContent = invalid.length > 0 ? `已儲存。這些不是網域，已略過：${invalid.join(', ')}` : '已儲存。'
 })
 
 $('font-scale').min = Settings.FONT_SCALE_MIN
@@ -120,7 +147,7 @@ $('font-scale').max = Settings.FONT_SCALE_MAX
 
 Settings.load().then((settings) => {
   showEngine(settings.engine)
-  $('position').value = settings.position
+  checkRadio('position', settings.position)
   $('youtube-auto').checked = settings.youtubeAuto
   fillAppearance(settings)
 })

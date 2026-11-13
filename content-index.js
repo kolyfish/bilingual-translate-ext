@@ -63,19 +63,29 @@
    */
   function showDownloadBanner(settings) {
     if (document.querySelector('.bt-banner')) return
-    const banner = document.createElement('div')
-    banner.className = 'bt-banner'
-    const message = document.createElement('div')
-    message.textContent = '第一次使用本機翻譯，需要下載英翻繁中語言包（只需一次，之後離線可用）'
-    const status = document.createElement('div')
-    status.className = 'bt-banner-status'
-    const actions = document.createElement('div')
-    const download = document.createElement('button')
-    download.textContent = '下載並翻譯'
-    const cancel = document.createElement('button')
-    cancel.textContent = '取消'
+    const el = (tag, className, text) => {
+      const node = document.createElement(tag)
+      if (className) node.className = className
+      if (text) node.textContent = text
+      return node
+    }
+    const banner = el('div', 'bt-banner')
+    banner.setAttribute('role', 'dialog')
+    banner.setAttribute('aria-label', '下載本機翻譯語言包')
+    const head = el('div', 'bt-banner-head')
+    head.append(el('span', 'bt-banner-seal', '譯'), el('strong', 'bt-banner-title', '下載本機翻譯語言包'))
+    const message = el('p', 'bt-banner-text', '下載一次就好。之後翻譯都在這台電腦上完成，文字不會送出去。')
+    const bar = el('div', 'bt-banner-bar')
+    const fill = el('div', 'bt-banner-fill')
+    bar.append(fill)
+    bar.hidden = true
+    const status = el('div', 'bt-banner-status')
+    status.setAttribute('aria-live', 'polite')
+    const actions = el('div', 'bt-banner-actions')
+    const download = el('button', 'bt-banner-go', '下載並翻譯')
+    const cancel = el('button', 'bt-banner-cancel', '取消')
     actions.append(download, cancel)
-    banner.append(message, status, actions)
+    banner.append(head, message, bar, status, actions)
     document.body.appendChild(banner)
 
     cancel.addEventListener('click', () => {
@@ -85,10 +95,13 @@
 
     download.addEventListener('click', () => {
       download.disabled = true
+      bar.hidden = false
       status.textContent = '下載中 0%'
       // 注意: 這裡必須同步呼叫，不能先 await 其他東西，否則可能失去使用者手勢
       BT.downloadLocal((loaded) => {
-        status.textContent = `下載中 ${Math.round(loaded * 100)}%`
+        const pct = Math.round(loaded * 100)
+        fill.style.width = `${pct}%`
+        status.textContent = `下載中 ${pct}%`
       })
         .then(() => {
           removeBanner()
@@ -97,7 +110,8 @@
         })
         .catch((err) => {
           console.error('[bilingual] 本機模型下載失敗', err.name, err.message)
-          status.textContent = `下載失敗（${err.name}），可在彈窗改用 Google 翻譯`
+          status.textContent = `下載失敗（${err.name}）。可以再試一次，或在擴充設定改用 Google。`
+          bar.hidden = true
           download.disabled = false
         })
     })
