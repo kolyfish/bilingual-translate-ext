@@ -3,12 +3,17 @@
 // 注意: 不在 youtube.com 啟用，由 content-index.js 分流
 (() => {
   const BT = window.BT
-  const { DONE_ATTR, THROTTLE_MS, state, normalize, looksEnglish, enqueue, translate, schedule } = BT
+  // 注意: 每次點擊都會重新注入，已載入就不重複定義
+  if (BT.page) return
+  const { DONE_ATTR, MAX_TEXT_CHARS, THROTTLE_MS, state, normalize, looksEnglish, enqueue, translate, schedule } = BT
 
   const BLOCK_SELECTOR = 'p, li, h1, h2, h3, h4, h5, h6, blockquote, dd, dt, figcaption, td, th'
   // 含這些子節點的元素不翻，由子節點自己翻
   const CONTAINER_SELECTOR = `${BLOCK_SELECTOR}, ul, ol, div, table`
-  const SKIP_SELECTOR = 'nav, pre, code, script, style, textarea, select, button, [contenteditable="true"], .bt-zh'
+  // 資安: 跳過隱藏元素，避免頁面用看不到的文字誘導翻譯或灌爆配額
+  const SKIP_SELECTOR =
+    'nav, pre, code, script, style, textarea, select, button, [contenteditable="true"], [hidden], [aria-hidden="true"], .bt-zh'
+  const VISIBILITY_OPTIONS = { checkOpacity: true, checkVisibilityCSS: true }
   // 決策: 表格與列表項目一律把譯文放在元素內部，直接在 tr/ul 下插 div 會破壞結構
   const INSIDE_TAGS = new Set(['LI', 'TD', 'TH'])
 
@@ -24,7 +29,8 @@
     return [...root.querySelectorAll(`${BLOCK_SELECTOR}, div`)].filter((el) => {
       if (el.hasAttribute(DONE_ATTR) || el.closest(SKIP_SELECTOR)) return false
       if (!isLeafBlock(el)) return false
-      return looksEnglish(normalize(el.textContent))
+      const text = normalize(el.textContent)
+      return text.length <= MAX_TEXT_CHARS && looksEnglish(text)
     })
   }
 
@@ -61,6 +67,12 @@
           if (!entry.isIntersecting) continue
           const el = entry.target
           state.io.unobserve(el)
+          // 決策: 可見性在進入視窗時才檢查，checkVisibility 會計算樣式，整頁掃描時做太貴
+          // 注意: display:none 本來就不會觸發 intersect，這裡擋的是 visibility:hidden / opacity:0
+          if (!el.checkVisibility(VISIBILITY_OPTIONS)) {
+            el.removeAttribute(DONE_ATTR)
+            continue
+          }
           const text = normalize(el.textContent)
           enqueue(async () => {
             const zh = await translate(text)

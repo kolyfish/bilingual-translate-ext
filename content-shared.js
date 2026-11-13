@@ -5,7 +5,11 @@
   if (window.BT) return
 
   const MIN_CHARS = 15
+  // 注意: 必須與 background.js 的 MAX_TEXT_CHARS 一致，超過的段落不送出
+  const MAX_TEXT_CHARS = 2000
   const CONCURRENCY = 4
+  // 同一種錯誤只提示一次，避免每段都洗 console
+  const warned = new Set()
   const THROTTLE_MS = 500
 
   // 所有模式共用的可變狀態，stop() 會統一清理這裡的資源
@@ -57,7 +61,16 @@
           resolve(null)
           return
         }
-        resolve(res && res.ok ? res.text : null)
+        if (res && res.ok) {
+          resolve(res.text)
+          return
+        }
+        const reason = res ? res.error : 'no-response'
+        if (!warned.has(reason)) {
+          warned.add(reason)
+          console.warn('[bilingual] 翻譯被拒或失敗：', reason)
+        }
+        resolve(null)
       })
     })
   }
@@ -73,6 +86,7 @@
 
   window.BT = {
     DONE_ATTR: 'data-bt-done',
+    MAX_TEXT_CHARS,
     THROTTLE_MS,
     state,
     normalize,

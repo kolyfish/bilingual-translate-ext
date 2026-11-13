@@ -3,25 +3,52 @@
 <head>
   <meta charset="utf-8">
   <style>
-    body { width: 240px; margin: 0; padding: 12px; font-family: system-ui, sans-serif; font-size: 14px; }
-    label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-    select { font-size: 13px; }
-    p { margin: 10px 0 0; font-size: 12px; color: #666; line-height: 1.5; }
+    body { width: 280px; margin: 0; padding: 12px; font-family: system-ui, sans-serif; font-size: 14px; }
+    button { font-size: 13px; cursor: pointer; }
+    #toggle-page { width: 100%; padding: 8px; font-size: 14px; }
+    label { display: flex; justify-content: space-between; align-items: center; margin: 10px 0; }
+    section { border-top: 1px solid #ddd; margin-top: 12px; padding-top: 10px; }
+    textarea { width: 100%; box-sizing: border-box; height: 80px; font-size: 12px; font-family: ui-monospace, monospace; }
+    .note { margin: 6px 0 0; font-size: 12px; color: #666; line-height: 1.5; }
+    .warn { color: #b26a00; }
+    #status { min-height: 1.5em; }
   </style>
 </head>
 <body>
-  <label>
-    啟用雙語對照
-    <input type="checkbox" id="toggle">
-  </label>
-  <label>
-    網頁譯文位置
-    <select id="position">
-      <option value="below">英文下方</option>
-      <option value="above">英文上方</option>
-    </select>
-  </label>
-  <p>網頁：依位置設定插入中文。<br>YouTube：請先開啟英文 CC，中文固定顯示在字幕下方。</p>
+  <button id="toggle-page">翻譯此頁 / 還原（Alt+A）</button>
+  <p id="status" class="note"></p>
+
+  <section>
+    <strong>Google 翻譯</strong>
+    <p id="gtx-state" class="note"></p>
+    <p class="note warn">允許後，要翻譯的文字會送到 Google 伺服器。</p>
+    <button id="gtx-grant" hidden>允許使用</button>
+    <button id="gtx-revoke" hidden>撤銷權限</button>
+  </section>
+
+  <section>
+    <label>
+      網頁譯文位置
+      <select id="position">
+        <option value="below">英文下方</option>
+        <option value="above">英文上方</option>
+      </select>
+    </label>
+    <label>
+      YouTube 自動雙語字幕
+      <input type="checkbox" id="youtube-auto">
+    </label>
+    <p class="note">YouTube 需先開啟英文 CC 字幕。</p>
+  </section>
+
+  <section>
+    <strong>自訂黑名單</strong>
+    <p class="note">一行一個網域，含子網域。網銀、Email、支付、密碼管理器已經內建。</p>
+    <textarea id="denylist" placeholder="example.com"></textarea>
+    <button id="save-denylist">儲存</button>
+    <span id="denylist-status" class="note"></span>
+  </section>
+
   <script src="popup.js"></script>
 </body>
 </html>

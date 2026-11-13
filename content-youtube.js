@@ -5,6 +5,8 @@
 // 注意: 需使用者先開英文 CC；字幕滾動頻繁變動，靠節流與 lastText 比對控制成本
 (() => {
   const BT = window.BT
+  // 注意: manifest 靜態注入後，按 Alt+A 會再注入一次，已載入就不重複定義
+  if (BT.youtube) return
   const { THROTTLE_MS, state, normalize, enqueue, translate, schedule } = BT
 
   const CAPTION_SEGMENT_SELECTOR = '.ytp-caption-window-container .ytp-caption-segment'

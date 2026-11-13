@@ -40,6 +40,8 @@ bilingual-translate-ext/
 共用層必須先載入，因為各模組都從 `window.BT` 取依賴。
 
 ### 資料流向
+> v0.3.0 起一般網頁改為點擊才注入，最新資料流以 `SECURITY.md` §4 為準；下圖為 v0.2 的版本。
+
 ```
 popup ──(storage.sync: enabled, position)──▶ content-index
                                                │ start(settings) / stop()
@@ -98,3 +100,11 @@ popup ──(storage.sync: enabled, position)──▶ content-index
 - 2026-11-13：架構調整。`content.js` 拆為 shared / page / youtube / index 四個模組；設定改用 `storage.sync` 並新增譯文上下位置；翻譯加入 8 秒逾時與引擎登錄表；設定變更時整體重建。
 - 2026-11-13：專案搬到 `/Volumes/SSD 1T/IT/`，建立 git repo；`.gitignore` 排除 exFAT 產生的 `._*` 檔案。
 - 2026-11-13：新增 `SECURITY.md` 資安重新規劃（尚未實作）。重點是預設改用 Chrome 內建本機翻譯，權限從 `<all_urls>` 縮成 activeTab，並加上敏感網站黑名單。原因：個人自用時，最大風險是擴充自己把網銀、Email 頁面的文字送給第三方。
+- 2026-11-13：完成資安 Phase 1（v0.3.0）。
+  - 拿掉 `<all_urls>`，一般網頁改成點工具列或按 Alt+A，才用 activeTab + scripting 注入；YouTube 只靜態注入 `www.youtube.com`。
+  - gtx 改為 `optional_host_permissions`，要在彈窗手動允許。
+  - 內建敏感網站黑名單，網域含 bank 一律擋，另可自訂（存 storage.local）；頁面有密碼欄位也拒絕。
+  - background 驗證訊息的 sender、型別與長度上限 2000，並設每頁配額（一般 500、YouTube 5000）。
+  - 跳過隱藏元素；log 不印原文；分頁狀態用徽章顯示。
+  - 拿掉「全站自動翻譯」開關。取捨：犧牲便利，換取沒點擊的網站完全讀不到。
+  - 踩坑：`permissions.request` 必須在點擊處理函式內直接呼叫，前面先 await 會失去使用者手勢。
