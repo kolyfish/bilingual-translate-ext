@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { width: 240px; margin: 0; padding: 12px; font-family: system-ui, sans-serif; font-size: 14px; }
+    label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    select { font-size: 13px; }
+    p { margin: 10px 0 0; font-size: 12px; color: #666; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <label>
+    啟用雙語對照
+    <input type="checkbox" id="toggle">
+  </label>
+  <label>
+    網頁譯文位置
+    <select id="position">
+      <option value="below">英文下方</option>
+      <option value="above">英文上方</option>
+    </select>
+  </label>
+  <p>網頁：依位置設定插入中文。<br>YouTube：請先開啟英文 CC，中文固定顯示在字幕下方。</p>
+  <script src="popup.js"></script>
+</body>
+</html>

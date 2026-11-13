@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "雙語對照翻譯",
+  "version": "0.2.0",
+  "description": "網頁英文上下插入中文對照；YouTube 英文 CC 即時加中文字幕",
+  "permissions": ["storage"],
+  "host_permissions": ["https://translate.googleapis.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content-shared.js", "content-page.js", "content-youtube.js", "content-index.js"],
+      "css": ["style.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "雙語對照翻譯"
+  }
+}

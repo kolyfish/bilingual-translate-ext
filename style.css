@@ -1,0 +1,39 @@
+/* 網頁對照譯文：暗黃底、淺色字 */
+/* 決策: 重設會被頁面繼承的文字樣式，避免大寫、字距、裝飾線跑到譯文上 */
+.bt-zh {
+  display: block;
+  margin: 4px 0 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #7a6500;
+  color: #fff6d5;
+  font-family: inherit;
+  font-size: 0.95em;
+  font-style: normal;
+  font-weight: normal;
+  line-height: 1.6;
+  letter-spacing: normal;
+  text-transform: none;
+  text-decoration: none;
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* YouTube 字幕譯文：置於英文字幕正下方，同樣暗黃底 */
+/* 注意: pointer-events 關閉，避免擋住播放器的點擊與暫停 */
+.bt-yt-zh {
+  display: block;
+  width: fit-content;
+  max-width: 90%;
+  margin: 4px auto 0;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: #7a6500;
+  color: #fff6d5;
+  font-family: inherit;
+  font-size: 0.9em;
+  line-height: 1.4;
+  text-align: center;
+  pointer-events: none;
+}
