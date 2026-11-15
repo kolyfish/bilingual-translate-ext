@@ -76,6 +76,7 @@ const PAGES = {
     <table><tr><td id="td1">Each table cell keeps its structure after the translation is inserted.</td></tr></table>
     <p id="hidden1" style="visibility:hidden">This hidden paragraph should never be translated by the tool.</p>
     <p id="aria1" aria-hidden="true">This aria hidden paragraph should also be skipped entirely here.</p>
+    <p id="zero" style="font-size:0">This paragraph hides itself with a zero font size trick.</p>
     <p id="cn">這是一段中文內容，不應該被送去翻譯，因為它本來就是中文。</p>
     <pre id="code1">const value = getSomethingFromTheServer(now) and more code here</pre>
     <div style="height:4000px"></div>
@@ -209,6 +210,7 @@ async function suiteB() {
 
     check('visibility:hidden 段落不翻', (await page.locator('#hidden1 + .bt-zh').count()) === 0)
     check('aria-hidden 段落不翻', (await page.locator('#aria1 + .bt-zh').count()) === 0)
+    check('font-size:0 的隱藏段落不翻', (await page.locator('#zero + .bt-zh').count()) === 0)
     check('中文段落不翻', (await page.locator('#cn + .bt-zh').count()) === 0)
     check('pre/code 不翻', (await page.locator('#code1 + .bt-zh').count()) === 0)
     check('視窗外段落尚未翻譯（懶載入）', (await page.locator('#far + .bt-zh').count()) === 0)
@@ -242,6 +244,50 @@ async function suiteB() {
     check('位置設定為上方時，譯文在英文上方', true)
     await toggle(sw, url)
     await sw.evaluate(() => chrome.storage.sync.set({ position: 'below' }))
+
+    // 單頁應用：翻譯開始後頁面才出現密碼欄位（例如切到登入頁、跳出登入視窗）
+    const spaUrl = 'https://article.test/?spa'
+    const spa = await openPage(context, spaUrl)
+    check('單頁應用：一開始沒有密碼欄位 → started', (await toggle(sw, spaUrl)) === 'started')
+    await spa.waitForSelector('#p1 + .bt-zh')
+    await spa.evaluate(() => {
+      const form = document.createElement('form')
+      form.innerHTML = '<p>Sign in again to continue reading this premium article.</p><input type="password">'
+      document.body.prepend(form)
+    })
+    await spa.waitForFunction(() => document.querySelectorAll('.bt-zh').length === 0)
+    check('出現密碼欄位後自動停止並移除譯文', true)
+    check('自動停止後徽章顯示 ✕', (await badge(sw, spaUrl)) === '✕')
+
+    // 「顯示密碼」反過來的情況：欄位從 text 改成 password
+    const spa2Url = 'https://article.test/?spa2'
+    const spa2 = await openPage(context, spa2Url)
+    await spa2.evaluate(() => {
+      const input = document.createElement('input')
+      input.type = 'text'
+      input.id = 'pw'
+      document.body.prepend(input)
+    })
+    check('一般文字欄位不影響 → started', (await toggle(sw, spa2Url)) === 'started')
+    await spa2.waitForSelector('#p1 + .bt-zh')
+    await spa2.evaluate(() => (document.getElementById('pw').type = 'password'))
+    await spa2.waitForFunction(() => document.querySelectorAll('.bt-zh').length === 0)
+    check('欄位 type 改成 password 也會自動停止', true)
+
+    // CSP：background 只能連到 Anthropic 與 Google 翻譯，其他網址一律被擋
+    const csp = await sw.evaluate(async () => {
+      const probe = async (url) => {
+        try {
+          const res = await fetch(url, { method: 'GET' })
+          return `reached ${res.status}`
+        } catch (err) {
+          return `blocked ${err.name}`
+        }
+      }
+      return { other: await probe('https://example.com/'), anthropic: await probe('https://api.anthropic.com/v1/models') }
+    })
+    check('CSP 擋下連到其他網站', csp.other.startsWith('blocked'), csp.other)
+    check('CSP 允許連到 api.anthropic.com', csp.anthropic.startsWith('reached'), csp.anthropic)
 
     const loginUrl = 'https://login.test/'
     const login = await openPage(context, loginUrl)
@@ -423,7 +469,19 @@ async function suiteB() {
 
     const usage = await sw.evaluate(() => chrome.storage.local.get('claudeUsage'))
     check('有記錄當天用量', usage.claudeUsage?.requests === reqs, JSON.stringify(usage.claudeUsage))
-    await toggle(sw, cUrl)
+
+    // 翻譯中途把金鑰移除，再按一次要能停止，不能被「沒有金鑰」擋住
+    await sw.evaluate(() => chrome.storage.session.remove('claudeApiKey'))
+    check('移除金鑰後仍然可以停止翻譯', (await toggle(sw, cUrl)) === 'stopped')
+    check('停止後譯文移除', (await cpage.locator('.bt-zh').count()) === 0)
+    await sw.evaluate(() => chrome.storage.session.set({ claudeApiKey: 'sk-ant-e2e-test-key-000000000000wxyz' }))
+
+    // 每日花費上限
+    await sw.evaluate(() => chrome.storage.local.set({ claudeUsage: { date: new Date().toLocaleDateString('sv-SE'), requests: 99, costUsd: 5 } }))
+    const limitStatus = await toggle(sw, cUrl)
+    check('超過每日上限 → claude-daily-limit', limitStatus === 'claude-daily-limit', limitStatus)
+    check('超過上限時徽章顯示 $', (await badge(sw, cUrl)) === '$')
+    await sw.evaluate((original) => chrome.storage.local.set({ claudeUsage: original }), usage.claudeUsage)
 
     const cp2 = await openPage(context, `chrome-extension://${new URL(sw.url()).host}/popup.html`)
     await cp2.waitForFunction(() => !document.getElementById('claude-key-saved').hidden)

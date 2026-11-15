@@ -56,6 +56,10 @@
       </div>
 
       <p id="claude-state" class="note" aria-live="polite"></p>
+      <div class="limit-row">
+        <label for="claude-limit">每日花費上限 US$</label>
+        <input id="claude-limit" class="text-input limit" type="number" step="0.5" inputmode="decimal">
+      </div>
       <p id="claude-usage" class="note"></p>
       <p class="note warn">翻譯的文字會送到 Anthropic。建議在 Anthropic Console 為這個擴充開一把專用金鑰，並設定每月消費上限。</p>
     </div>

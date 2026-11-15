@@ -63,6 +63,7 @@ const BADGES = {
   denied: { text: '✕', color: '#c62828' },
   'no-permission': { text: '!', color: '#c62828' },
   'no-key': { text: '!', color: '#c62828' },
+  'claude-daily-limit': { text: '$', color: '#c62828' },
   'needs-download': { text: '↓', color: '#1565c0' },
   'local-unavailable': { text: '!', color: '#c62828' },
   error: { text: '!', color: '#c62828' }
@@ -74,11 +75,21 @@ const cache = new Map()
 const requestCount = new Map()
 // 已插入 style.css 的分頁，避免重複插入堆疊
 const cssTabs = new Set()
+// 正在翻譯的分頁：這些分頁再按一次一定要能停止，不受權限、金鑰、上限等檢查影響
+// 注意: service worker 被回收時會清空，此時退回一般檢查流程
+const runningTabs = new Set()
 
 // 資安: 金鑰存在 storage.local 時，內容腳本預設讀得到；鎖成只有擴充頁面與 background 能讀
-chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }).catch((err) => {
-  console.error('[bilingual] 無法限制 storage.local 存取', err.name, err.message)
-})
+// 注意: 存取等級不保證跨瀏覽器重啟保留 [推測]，所以除了 worker 啟動時，也在 onStartup / onInstalled 再鎖一次；
+//       onStartup 會在 Chrome 啟動時喚醒 worker，縮短內容腳本先跑的空檔
+function lockLocalStorage() {
+  return chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }).catch((err) => {
+    console.error('[bilingual] 無法限制 storage.local 存取', err.name, err.message)
+  })
+}
+lockLocalStorage()
+chrome.runtime.onStartup.addListener(lockLocalStorage)
+chrome.runtime.onInstalled.addListener(lockLocalStorage)
 
 /* ---------- Google 引擎 ---------- */
 
@@ -166,12 +177,22 @@ async function getClaudeKey() {
 
 const todayKey = () => new Date().toLocaleDateString('sv-SE')
 
+async function getTodayUsage() {
+  const today = todayKey()
+  const { claudeUsage } = await chrome.storage.local.get('claudeUsage')
+  return claudeUsage?.date === today ? claudeUsage : { date: today, requests: 0, costUsd: 0 }
+}
+
+// 資安: 今天的估算花費達到上限就停用 Claude，直到隔天或使用者調高上限
+async function overDailyLimit() {
+  const day = await getTodayUsage()
+  return day.costUsd >= (await Settings.loadDailyLimit())
+}
+
 // 記錄當天用量，讓彈窗顯示估算花費；被盜刷時也比較容易發現
 async function recordClaudeUsage(model, usage) {
   const prices = Settings.CLAUDE_MODELS[model]
-  const today = todayKey()
-  const { claudeUsage } = await chrome.storage.local.get('claudeUsage')
-  const day = claudeUsage?.date === today ? claudeUsage : { date: today, requests: 0, costUsd: 0 }
+  const day = await getTodayUsage()
   day.requests += 1
   day.costUsd += (usage.input_tokens * prices.input + usage.output_tokens * prices.output) / 1e6
   await chrome.storage.local.set({ claudeUsage: day })
@@ -190,6 +211,8 @@ function mapClaudeError(err) {
 async function translateClaudeBatch(texts, model) {
   const apiKey = await getClaudeKey()
   if (!apiKey) throw new Error('no-key')
+  // 注意: 每一批送出前都要檢查，翻譯途中超過上限也會停下來（已送出的那一批可能讓花費略超過上限）
+  if (await overDailyLimit()) throw new Error('claude-daily-limit')
 
   const params = {
     model,
@@ -301,6 +324,11 @@ function setBadge(tabId, status) {
   const badge = BADGES[status] || BADGES.error
   chrome.action.setBadgeText({ tabId, text: badge.text })
   chrome.action.setBadgeBackgroundColor({ tabId, color: badge.color })
+  if (status === 'started') {
+    runningTabs.add(tabId)
+  } else {
+    runningTabs.delete(tabId)
+  }
 }
 
 // 線上引擎啟動前的檢查；回傳 null 代表可以開始
@@ -308,7 +336,10 @@ async function checkRemoteReady(settings) {
   const engine = REMOTE_ENGINES[settings.engine]
   if (!engine) return null
   if (!(await chrome.permissions.contains(engine.permission))) return 'no-permission'
-  if (settings.engine === 'claude' && !(await getClaudeKey())) return 'no-key'
+  if (settings.engine === 'claude') {
+    if (!(await getClaudeKey())) return 'no-key'
+    if (await overDailyLimit()) return 'claude-daily-limit'
+  }
   return null
 }
 
@@ -321,13 +352,17 @@ async function checkRemoteReady(settings) {
  *   string: started | stopped | blocked | denied | no-permission | no-key | needs-download | local-unavailable | error（不拋例外）
  */
 async function toggleTab(tab) {
-  let status
+  let status = null
   try {
-    const settings = await Settings.load()
-    if (await isDenied(tab.url)) {
-      status = 'denied'
-    } else {
-      status = await checkRemoteReady(settings)
+    // 資安: 已經在翻譯的分頁，再按一次就是要停止；停止不能被權限、金鑰或上限檢查擋住，
+    //       否則使用者撤銷權限或移除金鑰後，頁面上的翻譯反而關不掉
+    if (!runningTabs.has(tab.id)) {
+      const settings = await Settings.load()
+      if (await isDenied(tab.url)) {
+        status = 'denied'
+      } else {
+        status = await checkRemoteReady(settings)
+      }
     }
     if (!status) {
       const isYouTube = new URL(tab.url).hostname === YOUTUBE_HOST
@@ -367,6 +402,7 @@ const KNOWN_REJECTIONS = new Set([
   'no-permission',
   'no-key',
   'quota-exceeded',
+  'claude-daily-limit',
   'claude-auth',
   'claude-rate-limit',
   'claude-network'
@@ -478,11 +514,13 @@ chrome.tabs.onUpdated.addListener((tabId, info) => {
   if (info.status !== 'loading') return
   requestCount.delete(tabId)
   cssTabs.delete(tabId)
+  runningTabs.delete(tabId)
   chrome.action.setBadgeText({ tabId, text: '' })
 })
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   requestCount.delete(tabId)
   cssTabs.delete(tabId)
+  runningTabs.delete(tabId)
   claudeBatches.delete(tabId)
 })

@@ -26,6 +26,15 @@
       BT.youtube.start(session)
     } else {
       BT.page.start(session)
+      // 資安: 開始之後才出現密碼欄位也要立刻停止。單頁應用換到登入頁或帳戶頁時網址常常不重新載入，
+      //       內容腳本還在，只在啟動時檢查會漏掉。也監看 type 屬性，抓「顯示密碼」這類把 text 改成 password 的切換
+      state.guard = new MutationObserver(() => {
+        if (state.enabled && hasPasswordField()) {
+          stop()
+          reportStatus('blocked')
+        }
+      })
+      state.guard.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['type'] })
     }
   }
 
@@ -37,6 +46,8 @@
     state.io = null
     state.mo?.disconnect()
     state.mo = null
+    state.guard?.disconnect()
+    state.guard = null
     clearTimeout(state.timer)
     state.timer = null
     state.queue.length = 0

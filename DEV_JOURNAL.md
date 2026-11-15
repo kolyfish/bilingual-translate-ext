@@ -138,3 +138,14 @@ popup → storage.sync → onChanged → 外觀即時套用 / 位置重建 / You
   - 快取鍵加上引擎與模型，切換後不會拿到別的引擎的結果。
   - 踩坑：SDK 1.x 的 `apiKeyAuth` 把金鑰放在 `Authorization: Bearer`，不是舊版的 `x-api-key`。用真的 SDK 加攔截 `fetch` 確認過，這是官方設計。
   - 測試：單元測試加 Claude 情境；e2e 79 項（假 SDK client），另外用真的 SDK 加假 `fetch` 驗證請求格式。真的 API 呼叫還沒用真金鑰跑過。
+- 2026-11-16：v0.8.0，資安審查與修正（細節見 `SECURITY.md` §5.1）。
+  - S1：Claude 每日花費上限（預設 US$1），每批送出前檢查。上限存 `storage.local` 不存 sync，因為 sync 內容腳本也能寫。
+  - S2：開始翻譯後持續監看，出現密碼欄位（含 type 改成 password）就自動停止。原因：單頁應用切到登入頁不會重新載入，啟動時的檢查會漏掉。
+  - S3：manifest 加 CSP，`connect-src` 只允許 Anthropic 與 Google 翻譯；就算打包的 SDK 被植入惡意程式碼，也送不出金鑰。
+  - S4：`setAccessLevel` 也在 `onStartup`、`onInstalled` 呼叫。
+  - S5：寬或高小於 4px 的段落不翻，擋 `font-size:0` 的隱藏文字。
+  - S6：記錄正在翻譯的分頁，這些分頁一定能停止，不受權限、金鑰、上限檢查影響。
+  - S7：`scripts/deploy-local.sh` 部署到 `~/Extensions`（APFS + FileVault），檔案設成唯讀；`--verify` 只比對內容。
+  - 踩坑：`--verify` 一開始用 `rsync -a`，會比對權限位元，部署時刻意改成唯讀，結果每個檔案都被誤報；改用 `rsync -r --checksum` 只比內容。
+  - 踩坑：每日上限一開始放 `storage.sync`，審查時發現內容腳本可以寫 sync，改放 `storage.local`。
+  - 測試：e2e 91 項全過，包含 CSP 實測（`example.com` 被擋、`api.anthropic.com` 收到 401）；實際竄改部署檔，`--verify` 有抓到。

@@ -30,10 +30,21 @@ function memoryArea(initial = {}) {
 const local = memoryArea({ denylistExtra: [] })
 const session = memoryArea()
 
+// 假的 scripting：注入檔案不做事，呼叫 BT.toggle() 時回傳 nextToggleResult
+let nextToggleResult = 'started'
+const scriptingCalls = []
 const chrome = {
-  runtime: { id: 'self', onMessage: noop, getURL: (p) => `chrome-extension://self/${p}` },
+  runtime: { id: 'self', onMessage: noop, onStartup: noop, onInstalled: noop, getURL: (p) => `chrome-extension://self/${p}` },
   commands: { onCommand: noop },
   tabs: { onUpdated: noop, onRemoved: noop },
+  scripting: {
+    executeScript: async (opts) => {
+      scriptingCalls.push(opts)
+      return opts.func ? [{ result: nextToggleResult }] : []
+    },
+    insertCSS: async () => {},
+    removeCSS: async () => {}
+  },
   action: { setBadgeText() {}, setBadgeBackgroundColor() {} },
   storage: {
     local,
@@ -192,6 +203,44 @@ function useFakeClaude(behavior = {}) {
   useFakeClaude()
   syncData = { engine: 'claude' }
   assert.equal((await call({ type: 'translate', text: 'Remembered key in local storage.' }, tabSender(10))).ok, true, '勾「記住」時從 storage.local 讀金鑰')
+
+  // ---------- 每日花費上限 ----------
+  const S = ctx.BT_SETTINGS
+  assert.equal(S.sanitizeDailyLimit(undefined), 1, '沒設定時預設 US$1')
+  assert.equal(S.sanitizeDailyLimit('0'), 0.1, '不接受 0，夾到最低 0.1')
+  assert.equal(S.sanitizeDailyLimit(-5), 0.1, '不接受負數')
+  assert.equal(S.sanitizeDailyLimit('abc'), 1, '非數字退回預設')
+  assert.equal(S.sanitizeDailyLimit(999), 50, '最高 50')
+  assert.equal(S.sanitizeDailyLimit('2.345'), 2.35, '四捨五入到分')
+
+  const today = new Date().toLocaleDateString('sv-SE')
+  local.store.claudeUsage = { date: today, requests: 40, costUsd: 1.2 }
+  useFakeClaude()
+  assert.equal((await call({ type: 'translate', text: 'Over the daily limit already.' }, tabSender(12))).error, 'claude-daily-limit', '超過每日上限要拒絕')
+  assert.equal(claudeRequests.length, 0, '超過上限時不能送出請求')
+  assert.equal(await ctx.checkRemoteReady(await S.load()), 'claude-daily-limit', '超過上限時不該開始翻譯')
+  local.store.claudeDailyLimitUsd = 5
+  assert.equal((await call({ type: 'translate', text: 'Raised the daily limit now.' }, tabSender(13))).ok, true, '調高上限後恢復')
+  local.store.claudeUsage = { date: '2000-01-01', requests: 999, costUsd: 999 }
+  delete local.store.claudeDailyLimitUsd
+  assert.equal((await call({ type: 'translate', text: 'A new day resets the usage.' }, tabSender(14))).ok, true, '換日後用量歸零')
+
+  // ---------- 翻譯中的分頁一定能停止 ----------
+  delete local.store.claudeApiKey
+  delete session.store.claudeApiKey
+  const tab = { id: 21, url: 'https://medium.com/post' }
+  nextToggleResult = 'started'
+  assert.equal(await ctx.toggleTab(tab), 'no-key', '沒有金鑰時不能開始')
+  ctx.setBadge(tab.id, 'started')
+  nextToggleResult = 'stopped'
+  scriptingCalls.length = 0
+  assert.equal(await ctx.toggleTab(tab), 'stopped', '已在翻譯的分頁，就算金鑰被移除也要能停止')
+  assert.ok(scriptingCalls.some((c) => c.func), '停止時確實有呼叫內容腳本的 toggle')
+  assert.equal(await ctx.toggleTab(tab), 'no-key', '停止後再按，又會回到正常檢查')
+  const bankTab = { id: 22, url: 'https://www.mybank.com/' }
+  scriptingCalls.length = 0
+  assert.equal(await ctx.toggleTab(bankTab), 'denied', '黑名單網站拒絕')
+  assert.equal(scriptingCalls.length, 0, '被拒的網站完全不注入')
 
   // 配額：第 501 次應被拒（前面每次都會因 fetch 失敗回 translate-failed，但會計數）
   syncData = { engine: 'gtx' }

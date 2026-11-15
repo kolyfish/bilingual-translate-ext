@@ -15,6 +15,7 @@ const STATUS_TEXT = {
   denied: '這個網站在不翻譯清單上，或是 Chrome 不允許擴充在這裡執行。',
   'no-permission': '要先在下方允許連線，才能用線上翻譯。',
   'no-key': '要先在下方貼上 Claude API 金鑰。',
+  'claude-daily-limit': '今天的 Claude 花費已達上限，明天會自動恢復，也可以在下方調高上限。',
   'needs-download': '第一次使用：請按網頁右下角的「下載並翻譯」。',
   'local-unavailable': '這個 Chrome 不支援本機英翻繁中，可以改用 Google。',
   error: '這一頁無法翻譯。'
@@ -89,8 +90,20 @@ async function refreshClaude() {
   }
   const today = new Date().toLocaleDateString('sv-SE')
   const usage = claudeUsage?.date === today ? claudeUsage : { requests: 0, costUsd: 0 }
-  $('claude-usage').textContent = `今天 ${usage.requests} 次請求，約 US$${usage.costUsd.toFixed(3)}`
+  const limit = await Settings.loadDailyLimit()
+  $('claude-limit').value = limit.toFixed(2)
+  const reached = usage.costUsd >= limit
+  $('claude-usage').textContent = `今天 ${usage.requests} 次請求，約 US$${usage.costUsd.toFixed(3)}${reached ? '，已達上限' : ''}`
+  $('claude-usage').className = `note ${reached ? 'bad' : ''}`
 }
+
+$('claude-limit').min = Settings.DAILY_LIMIT_MIN
+$('claude-limit').max = Settings.DAILY_LIMIT_MAX
+$('claude-limit').addEventListener('change', async () => {
+  // 資安: 存 storage.local，不存 sync（理由見 settings.js 的 DEFAULT_DAILY_LIMIT）
+  await chrome.storage.local.set({ claudeDailyLimitUsd: Settings.sanitizeDailyLimit($('claude-limit').value) })
+  await refreshClaude()
+})
 
 for (const radio of document.querySelectorAll('input[name="claude-model"]')) {
   radio.addEventListener('change', () => {

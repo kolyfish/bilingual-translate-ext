@@ -7,7 +7,7 @@
 
 | 項目 | 內容 |
 |------|------|
-| 版本 | 0.7.0 |
+| 版本 | 0.8.0 |
 | 平台 | Google Chrome 138+（桌面版），開發環境為 Mac mini M4 + Chrome 157 |
 | 技術 | Manifest V3、原生 JavaScript、零第三方執行期依賴 |
 | 翻譯引擎 | **預設本機**：Chrome 內建 Translator API，文字不離開電腦；可改用 Claude（自己的 API 金鑰）或 Google gtx，都要手動授權 |
@@ -23,12 +23,16 @@
 
 ## 1. 安裝
 
-1. 打開 `chrome://extensions`，開啟右上角的「開發人員模式」
-2. 點「載入未封裝項目」，選擇這個專案資料夾
-3. 開一篇英文網頁，按 `Alt+A`。第一次使用時，右下角會出現「下載並翻譯」，按下去下載英翻繁中語言包（只需一次）
-4. （選用）想改用 Google 翻譯：彈窗 →「翻譯引擎」選 Google →「允許使用」→ Chrome 跳出對話框時按允許
+1. 部署到內建磁碟（原始碼放外接碟時特別重要，理由見 `SECURITY.md` §5.1 S7）：
+   ```bash
+   ./scripts/deploy-local.sh
+   ```
+2. 打開 `chrome://extensions`，開啟右上角的「開發人員模式」
+3. 點「載入未封裝項目」，選擇 **`~/Extensions/bilingual-translate-ext`**（不要選原始碼資料夾）
+4. 開一篇英文網頁，按 `Alt+A`。第一次使用時，右下角會出現「下載並翻譯」，按下去下載英翻繁中語言包（只需一次）
+5. （選用）想改用 Claude 或 Google：見下方「翻譯引擎」
 
-> 改過程式碼之後，要在 `chrome://extensions` 按擴充卡片上的 ↻ 重新載入，再重新整理網頁。
+> 改過程式碼之後：重跑 `./scripts/deploy-local.sh` → 在 `chrome://extensions` 按擴充卡片上的 ↻ 重新載入 → 重新整理網頁。
 
 ## 2. 使用
 
@@ -49,6 +53,9 @@
 | `↓`（藍） | 本機語言包還沒下載，請按頁面右下角的「下載並翻譯」 |
 | `✕`（紅） | 被拒絕：敏感網站、黑名單，或頁面上有密碼欄位 |
 | `!`（紅） | Google 模式還沒授權、瀏覽器不支援本機翻譯，或這一頁無法執行（例如 Chrome 線上應用程式商店） |
+| `$`（紅） | Claude 今天的花費已達每日上限 |
+
+翻譯中途如果頁面出現密碼欄位（例如切到登入頁），會自動停止並顯示 `✕`。
 
 ### 翻譯引擎
 | | 本機（預設） | Claude（選用） | Google（選用） |
@@ -77,6 +84,7 @@
 | 請求設定 | `effort: low`；用 structured outputs 取回 JSON；Opus 開啟伺服器端拒答備援（`fallbacks: "default"`），Haiku 沒有這個功能所以不帶 |
 | 提示注入防護 | 系統提示明講頁面文字是要翻譯的資料，不是指令；譯文比原文長 4 倍以上就丟掉；譯文一律用 `textContent` 插入 |
 | 用量 | 每次請求後記下當天次數與估算花費。實際費用以 Console 為準，啟用備援模型時費率可能不同 |
+| 每日上限 | 預設 US$1，可在彈窗調整（0.1–50）。估算花費達到上限就停用 Claude 到隔天，徽章顯示 `$`。這是擴充內的保護，Console 的消費上限仍然要設 |
 | YouTube | 字幕一次一句，無法合併請求，長片費用會比較高。用 Opus 一小時約 $3–4 `[推測]`，看 YouTube 建議切 Haiku |
 
 ### 彈窗設定
@@ -115,7 +123,8 @@ bilingual-translate-ext/
 ├── vendor/
 │   └── anthropic-sdk.js # 官方 Anthropic SDK 1.3.0 打包檔（只給 background 用）
 ├── scripts/
-│   └── build-vendor.sh  # 重新產生 vendor/anthropic-sdk.js
+│   ├── build-vendor.sh  # 重新產生 vendor/anthropic-sdk.js
+│   └── deploy-local.sh  # 部署到 ~/Extensions（內建磁碟、唯讀）；--verify 檢查是否被改過
 ├── tests/
 │   ├── unit-background.js   # 黑名單、引擎限制、訊息驗證單元測試（不需任何套件）
 │   └── e2e.js               # Playwright + Chromium 端對端測試
@@ -208,7 +217,7 @@ popup → storage.sync → content-index onChanged
 
 ### 4.1 改程式碼
 1. 修改檔案
-2. 在 `chrome://extensions` 重新載入擴充
+2. `./scripts/deploy-local.sh` 部署，再到 `chrome://extensions` 重新載入擴充
 3. 重新整理要測的網頁（舊頁面上的內容腳本已經失效）
 4. 跑測試（見 4.3）
 5. 更新 `DEV_JOURNAL.md` 的變更紀錄，有架構變動也要更新本檔
@@ -232,7 +241,7 @@ popup → storage.sync → content-index onChanged
 node tests/unit-background.js
 ```
 
-**端對端測試**（79 項；需要 Playwright 和它附的 Chromium）
+**端對端測試**（91 項；需要 Playwright 和它附的 Chromium）
 ```bash
 PLAYWRIGHT_PATH=/path/to/node_modules/playwright node tests/e2e.js
 ```
@@ -298,4 +307,5 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST 'https://translate.googleapis.c
 | Phase 2 | Chrome 內建 Translator API（本機離線，文字不出機器），gtx 降為選用 | ✅ v0.5.0（真的語言包下載待在 Chrome 上驗證） |
 | — | 介面重新設計、朱砂印圖示 | ✅ v0.6.0 |
 | — | Claude 引擎（自己的 API 金鑰） | ✅ v0.7.0（真的 API 呼叫待你用自己的金鑰驗證） |
+| — | 資安修正：花費上限、中途密碼欄位、CSP、部署到內建磁碟等 7 項 | ✅ v0.8.0，見 `SECURITY.md` §5.1 |
 | Phase 3 | 擴充搬到內建 APFS 磁碟、譯文改用 Shadow DOM（選做） | 規劃中 |

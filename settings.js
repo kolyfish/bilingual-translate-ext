@@ -27,6 +27,12 @@
   }
   const FONT_SCALE_MIN = 70
   const FONT_SCALE_MAX = 160
+  // Claude 每日花費上限（美元），超過就停用 Claude 直到隔天；防止被灌文字或程式錯誤一直燒錢
+  // 資安: 上限存在 storage.local（已鎖成只有擴充本身能讀寫），不放 sync；
+  //       sync 內容腳本也能寫，萬一內容腳本被利用，也改不了上限
+  const DEFAULT_DAILY_LIMIT = 1
+  const DAILY_LIMIT_MIN = 0.1
+  const DAILY_LIMIT_MAX = 50
   // 資安: 只接受 #rrggbb，避免把任意字串寫進頁面的 CSS 變數
   const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i
   const LIGHT_TEXT = '#fff5f5'
@@ -49,6 +55,18 @@
   }
 
   const load = async () => sanitize(await chrome.storage.sync.get(DEFAULTS))
+
+  // 資安: 不合法或超出範圍時夾到範圍內；不接受 0 或負數，避免上限形同虛設
+  function sanitizeDailyLimit(value) {
+    const n = value === undefined || value === null || value === '' ? NaN : Number(value)
+    return Number.isFinite(n)
+      ? Math.min(DAILY_LIMIT_MAX, Math.max(DAILY_LIMIT_MIN, Math.round(n * 100) / 100))
+      : DEFAULT_DAILY_LIMIT
+  }
+
+  // 注意: 只能在 background 與彈窗呼叫；內容腳本讀不到 storage.local
+  const loadDailyLimit = async () =>
+    sanitizeDailyLimit((await chrome.storage.local.get('claudeDailyLimitUsd')).claudeDailyLimitUsd)
 
   // WCAG 相對亮度
   function luminance(hex) {
@@ -82,6 +100,11 @@
     DEFAULTS,
     ENGINES,
     CLAUDE_MODELS,
+    DEFAULT_DAILY_LIMIT,
+    DAILY_LIMIT_MIN,
+    DAILY_LIMIT_MAX,
+    sanitizeDailyLimit,
+    loadDailyLimit,
     FONT_SCALE_MIN,
     FONT_SCALE_MAX,
     sanitize,

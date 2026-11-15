@@ -23,6 +23,7 @@
     position: 'below', // 網頁譯文位置：'below' | 'above'
     io: null,
     mo: null,
+    guard: null, // 監看密碼欄位出現的 MutationObserver（網頁模式）
     timer: null,
     queue: [],
     active: 0

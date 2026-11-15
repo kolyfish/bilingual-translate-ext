@@ -1,6 +1,6 @@
 # 資安重新規劃（個人自用 / Mac mini M4）
 
-> 狀態：**Phase 1（v0.3.0）、Phase 2（v0.5.0）已實作**，Phase 3 尚未實作。標 `[待驗證]` 的項目需要在本機 Chrome 實測後才能定案。
+> 狀態：**Phase 1（v0.3.0）、Phase 2（v0.5.0）、資安修正（v0.8.0）已實作**；R5 已用部署腳本處理。標 `[待驗證]` 的項目需要在本機 Chrome 實測後才能定案。
 
 ## 0. 前提
 
@@ -32,7 +32,7 @@
 | R2 | gtx 非官方端點 | 頁面原文出站，使用條款灰色，可能被封 IP | 🔴 高 |
 | R3 | background `onMessage` 沒做驗證 | 沒檢查 sender、型別、長度 | 🟠 中 |
 | R4 | 惡意網頁塞大量隱藏英文 | 可耗用翻譯配額，可能導致 IP 被封 | 🟠 中 |
-| R5 | 原始碼放在 exFAT 外接碟 | 沒有權限控管、沒有加密，被改後 Chrome 重新載入就會執行 | 🟠 中 |
+| R5 | 原始碼放在 exFAT 外接碟 | 沒有權限控管、沒有加密，被改後 Chrome 重新載入就會執行。✅ v0.8.0：`scripts/deploy-local.sh` 部署到內建磁碟並設成唯讀，見 §7 | 🟠 中 → 已處理 |
 | R6 | DOM 標記（`data-bt-done`、`.bt-zh`） | 網頁可偵測到擴充存在（指紋） | 🟢 低 |
 | R7 | `storage.sync` 會同步到 Google 帳號 | 目前只有開關與位置，沒有機密 | 🟢 低（未來放 API key 就變高） |
 | ✅ | 譯文插入用 `textContent` | 沒有 XSS 風險 | — |
@@ -137,6 +137,23 @@ content → background（驗證 sender / type / 長度 / 次數）
 | Phase 2 ✅ | D1 本機翻譯 + 首次下載語言包流程 | 中，真的語言包下載需要在你的 M4 上實測 `[待驗證]` |
 | Phase 3 | D6 搬到內建磁碟、D5 Shadow DOM（選做） | 低 |
 
+## 5.1 v0.8.0 資安審查與修正
+
+| # | 問題 | 會發生什麼 | 修正 | 驗證 |
+|---|------|-----------|------|------|
+| S1 🔴 | Claude 沒有花費上限 | 惡意網頁、YouTube 自動字幕或程式 bug 一直打 API；每頁配額重新整理就歸零 | 每日花費上限，預設 US$1（可調 0.1–50）；每一批送出前都檢查，超過就停到隔天，徽章顯示 `$`。上限存在 `storage.local`（內容腳本讀寫不到），不放 sync | 單元：邊界值、換日歸零、超過時 0 次請求；e2e：超過上限回 `claude-daily-limit` |
+| S2 🔴 | 只在啟動時檢查密碼欄位 | 單頁應用切到登入或帳戶頁（不重新載入），新內容照樣被送出去翻譯 | 啟動後持續監看，出現密碼欄位或欄位 `type` 改成 password，就立刻停止、移除譯文、徽章顯示 `✕` | e2e：中途插入密碼欄位、text 改 password 都會自動停止 |
+| S3 🟠 | 沒有明確 CSP | 打包的 SDK 若被植入惡意程式碼，可以把金鑰送到任何網站 | manifest 加 `connect-src https://api.anthropic.com https://translate.googleapis.com`，另外加 `object-src 'none'`、`base-uri 'none'`、`form-action 'none'`、`frame-ancestors 'none'` | e2e：連 `example.com` 被擋、連 `api.anthropic.com` 收到 401 |
+| S4 🟠 | `setAccessLevel` 只在 worker 啟動時呼叫 | 重開 Chrome 後內容腳本可能先跑，有空檔讀到金鑰 `[推測]` | 另外在 `onStartup`、`onInstalled` 再鎖一次；`onStartup` 會在 Chrome 啟動時喚醒 worker | e2e：內容腳本讀 `storage.local` 被擋 |
+| S5 🟠 | `font-size:0`、寬高 0 的隱藏文字擋不住 | 網頁藏文字誘導翻譯、洗額度 | 寬或高小於 4px 的段落不翻 | e2e：`font-size:0` 段落沒有譯文 |
+| S6 🟢 | 中途撤銷權限或移除金鑰後關不掉 | 停止也要先過權限檢查 | 記錄正在翻譯的分頁，這些分頁再按一次一定能停止 | 單元＋e2e：移除金鑰後仍回 `stopped` |
+| S7 🟠 | 擴充從 exFAT 外接碟載入（R5） | 任何程式都能改程式碼 | 部署到 `~/Extensions/bilingual-translate-ext`（APFS + FileVault），檔案 444、資料夾 555；`--verify` 比對內容 | 實測：直接寫入被拒；竄改後 `--verify` 抓到 `background.js` |
+
+**刻意不做（剩下的風險）**
+- `engine`、`claudeModel` 等設定還在 `storage.sync`，內容腳本可以寫。如果內容腳本被利用，可以把引擎從本機切到 Claude；但還是要有金鑰和連線權限，而且花費受每日上限限制（上限內容腳本改不了）。要完全擋住，得把設定改成由 background 轉發，代價是要重寫設定同步，目前不划算。
+- 頁面上的 `.bt-zh`、`data-bt-done` 仍然看得到（R6，網頁可以偵測擴充存在）。
+- 每頁配額在 worker 記憶體裡，worker 被回收就歸零；所以才加上每日花費上限當硬性保護。
+
 ## 6. 需要你決定的事
 
 1. **取消全站自動翻**，改成點擊或快捷鍵才翻，再加白名單自動翻？（建議：是）
@@ -149,6 +166,10 @@ content → background（驗證 sender / type / 長度 / 次數）
 - 本機模式：DevTools → Network，翻譯時不應該有任何對外請求。
 - 打開網銀或 Gmail，按 `Alt+A`：應該被拒絕並顯示提示。
 - 製作一個含隱藏英文段落的測試頁：隱藏段落不應被翻譯。
+- 確認 Chrome 載入的那份沒被改過：
+  ```bash
+  ./scripts/deploy-local.sh --verify
+  ```
 
 ## 參考來源
 - [Translation with built-in AI — Chrome for Developers](https://developer.chrome.com/docs/ai/translator-api)

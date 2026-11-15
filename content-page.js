@@ -14,6 +14,8 @@
   const SKIP_SELECTOR =
     'nav, pre, code, script, style, textarea, select, button, [contenteditable="true"], [hidden], [aria-hidden="true"], .bt-zh'
   const VISIBILITY_OPTIONS = { checkOpacity: true, checkVisibilityCSS: true }
+  // 寬或高小於這個值的段落視為看不見
+  const MIN_VISIBLE_PX = 4
   // 決策: 表格與列表項目一律把譯文放在元素內部，直接在 tr/ul 下插 div 會破壞結構
   const INSIDE_TAGS = new Set(['LI', 'TD', 'TH'])
 
@@ -69,7 +71,9 @@
           state.io.unobserve(el)
           // 決策: 可見性在進入視窗時才檢查，checkVisibility 會計算樣式，整頁掃描時做太貴
           // 注意: display:none 本來就不會觸發 intersect，這裡擋的是 visibility:hidden / opacity:0
-          if (!el.checkVisibility(VISIBILITY_OPTIONS)) {
+          // 資安: checkVisibility 抓不到 font-size:0、height:0 這類「看起來不存在」的文字，另外用實際尺寸擋
+          const box = entry.boundingClientRect
+          if (box.width < MIN_VISIBLE_PX || box.height < MIN_VISIBLE_PX || !el.checkVisibility(VISIBILITY_OPTIONS)) {
             el.removeAttribute(DONE_ATTR)
             continue
           }
