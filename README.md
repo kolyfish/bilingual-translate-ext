@@ -7,7 +7,7 @@
 
 | 項目 | 內容 |
 |------|------|
-| 版本 | 0.8.1 |
+| 版本 | 0.8.2 |
 | 平台 | Google Chrome 138+（桌面版），開發環境為 Mac mini M4 + Chrome 157 |
 | 技術 | Manifest V3、原生 JavaScript、零第三方執行期依賴 |
 | 翻譯引擎 | **預設本機**：Chrome 內建 Translator API，文字不離開電腦；可改用 Claude（自己的 API 金鑰）或 Google gtx，都要手動授權 |

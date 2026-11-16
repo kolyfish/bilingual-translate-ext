@@ -43,7 +43,9 @@ const DEFAULT_DENYLIST = [
   'web.whatsapp.com',
   'messenger.com',
   'web.telegram.org',
+  // Anthropic Console（金鑰、帳單頁面）；新網址是 platform.claude.com
   'console.anthropic.com',
+  'platform.claude.com',
   'cathaybk.com.tw',
   'fubon.com',
   'post.gov.tw'

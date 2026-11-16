@@ -156,3 +156,4 @@ popup → storage.sync → onChanged → 外觀即時套用 / 位置重建 / You
   - 監看範圍加上 `style` 屬性：YouTube 按 `+` / `-` 時只改原生字幕的 inline style。
   - 順便修正原本就有的效能 bug：每次同步都重設英文的 `textContent`，會觸發自己的 MutationObserver，字幕在畫面上時每 150ms 空轉一次。改成值有變才寫入；e2e 量 1.2 秒內 0 次變動。
   - 測試：e2e 96 項，包含滑桿即時生效、模擬 `+` 鍵、網頁字級不影響 YouTube、閒置不空轉。
+- 2026-11-16：v0.8.2，黑名單加入 `platform.claude.com`。原因：Anthropic Console 改到新網址，舊的黑名單只擋 `console.anthropic.com`；新建金鑰時完整金鑰只顯示一次，就在這個頁面上，不能被送去翻譯。
