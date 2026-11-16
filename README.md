@@ -125,7 +125,10 @@ bilingual-translate-ext/
 │   └── anthropic-sdk.js # 官方 Anthropic SDK 1.3.0 打包檔（只給 background 用）
 ├── scripts/
 │   ├── build-vendor.sh  # 重新產生 vendor/anthropic-sdk.js
-│   └── deploy-local.sh  # 部署到 ~/Extensions（內建磁碟、唯讀）；--verify 檢查是否被改過
+│   ├── deploy-local.sh  # 部署到 ~/Extensions（內建磁碟、唯讀）；--verify 檢查是否被改過
+│   └── package.sh       # 打包成給朋友的安裝包與上架商店用的 zip，輸出到 dist/
+├── packaging/           # 安裝包用的 Mac / Windows 安裝程式與安裝說明
+├── PRIVACY.md           # 隱私權政策（上架商店必填）
 ├── tests/
 │   ├── unit-background.js   # 黑名單、引擎限制、訊息驗證單元測試（不需任何套件）
 │   └── e2e.js               # Playwright + Chromium 端對端測試
@@ -303,7 +306,38 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST 'https://translate.googleapis.c
 
 ---
 
-## 6. 路線圖
+## 6. 分享給別人
+
+Chrome 不允許從商店以外的地方一鍵安裝擴充：`.crx` 檔會被封鎖，`--load-extension` 也在 Chrome 137 移除了。所以有兩條路：
+
+### 6.1 安裝包（現在就能用）
+```bash
+./scripts/package.sh
+```
+會在 `dist/` 產生 `bilingual-translate-v<版本>.zip`，直接傳給朋友。
+
+- 朋友解壓縮後執行 `Install-Mac.command`（第一次要用右鍵 →「打開」）或 `Install-Windows.bat`
+- 安裝程式會把擴充放到 `~/Extensions/bilingual-translate-ext`，打開 Chrome 的擴充功能頁面，並把路徑複製到剪貼簿
+- 剩下要朋友自己點 3 下：開發人員模式 →「載入未封裝項目」→ 貼上路徑
+- 缺點：Chrome 可能會提醒「停用開發人員模式擴充功能」；更新要重新跑一次安裝程式
+- 詳細步驟在安裝包裡的 `INSTALL.txt`
+
+### 6.2 上架 Chrome 線上應用程式商店（真正的一鍵安裝）
+`./scripts/package.sh` 也會產生 `bilingual-translate-store-v<版本>.zip`，manifest 在 zip 根目錄，可以直接上傳。
+
+1. 到 Chrome Web Store 開發人員資訊主頁註冊（一次性 US$5 註冊費）
+2. 上傳商店用的 zip
+3. 隱私權政策網址：`https://github.com/kolyfish/bilingual-translate-ext/blob/main/PRIVACY.md`
+4. 「瀏覽權限」選 **不公開（Unlisted）**，只有拿到連結的人看得到
+5. 審核通過後，把連結傳給朋友，點「加到 Chrome」就完成，之後也會自動更新
+
+審核可能卡關的地方 `[推測]`：
+- Google 引擎用的是非官方端點 `translate.googleapis.com/translate_a/single`，可能被視為違反服務條款。真的被退件的話，上架版本拿掉 Google 引擎即可
+- 要在表單說明每個權限的用途（`activeTab`、`scripting`、`storage`、YouTube 內容腳本、兩個選用的連線權限），可以直接引用 `SECURITY.md` 的內容
+
+---
+
+## 7. 路線圖
 | 階段 | 內容 | 狀態 |
 |------|------|------|
 | Phase 1 | 權限最小化、黑名單、訊息驗證、log 清理 | ✅ v0.3.0 |

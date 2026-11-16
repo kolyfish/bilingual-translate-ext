@@ -161,3 +161,11 @@ popup → storage.sync → onChanged → 外觀即時套用 / 位置重建 / You
   - 原因：譯文回來時「只接受最新一句」。翻譯一句比字幕換句還慢時（Claude 要幾秒），每個譯文回來時字幕都換了，結果全部被丟掉，只有講者停下來時最後一句才翻得出來。另外過期的句子照樣送出，白花時間和額度。
   - 修正：譯文只要比畫面上的中文新就顯示；YouTube 同一時間只送一個請求，翻譯途中的新句子只保留最新一句（pending），中間的略過。不能用共用佇列做，因為 Google 併發 4、Claude 併發 16，每句一出現就送出，根本不會排隊。
   - 驗證：e2e 模擬每句翻 700ms、字幕每 250ms 換一句。修改前換句期間中文顯示 0 次、12 句送 12 次；修改後顯示 4 次、只送 5 次。
+- 2026-11-16：打包給朋友安裝。
+  - 結論：真正的一鍵安裝只能透過 Chrome 線上應用程式商店。商店外的 `.crx` 會被封鎖，`--load-extension` 在 Chrome 137 移除。
+  - `scripts/package.sh` 產生兩個 zip：給朋友的安裝包（`extension/` + Mac `.command` + Windows `.bat` + `INSTALL.txt`），以及上架用的 zip（manifest 在根目錄）。
+  - 安裝程式能自動的都自動：放到 `~/Extensions`、設唯讀、打開 `chrome://extensions`、把路徑放進剪貼簿；「載入未封裝項目」要使用者自己點。
+  - 新增 `PRIVACY.md`（上架必填）。
+  - 踩坑：`deploy-local.sh` 原本沒有排除新的 `packaging/`、`dist/`，會被一起部署進 Chrome 載入的資料夾；兩支腳本現在用同一套排除規則。
+  - 踩坑：Windows 批次檔要 CRLF，打包時用 perl 轉換；`.command` 要保留執行權限，否則 Mac 點兩下打不開。
+  - 驗證：在隔離的假家目錄跑 Mac 安裝程式（`open`、`pbcopy` 換成假的），兩次安裝（含覆蓋唯讀舊版）都成功；用 Chromium 載入裝出來的資料夾，SDK、設定、彈窗都正常。Windows 安裝程式沒有在 Windows 上實測。

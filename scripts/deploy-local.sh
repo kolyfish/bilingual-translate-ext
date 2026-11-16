@@ -16,7 +16,8 @@ DEST="$HOME/Extensions/bilingual-translate-ext"
 # 只部署執行需要的檔案；測試、文件、腳本、git 資料都不放進 Chrome 會載入的資料夾
 RSYNC_FILTERS=(
   --exclude '.git' --exclude '.gitignore' --exclude '._*' --exclude '.DS_Store'
-  --exclude 'tests' --exclude 'docs' --exclude 'scripts' --exclude '*.md'
+  --exclude 'tests' --exclude 'docs' --exclude 'scripts' --exclude 'packaging' --exclude 'dist'
+  --exclude '*.md'
 )
 
 if [[ "${1:-}" == "--verify" ]]; then
