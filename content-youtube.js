@@ -30,7 +30,25 @@
   let zhEl = null
   let stableTimer = null
 
-  function ensureBox(player) {
+  // 原生字幕字級讀不到時，退回用播放器寬度估算
+  const FALLBACK_BASE_RATIO = 0.026
+  const MIN_BASE_PX = 12
+
+  /**
+   * 雙語框的基準字級
+   *
+   * 決策: 直接讀 YouTube 原生字幕的字級，而不是自己用播放器寬度算
+   * 原因: 原生字幕的字級已經反映播放器大小，以及使用者在 YouTube 裡的字幕設定（設定 → 字幕 → 選項 → 字型大小、
+   *       快捷鍵 + / -）。自己算的話，這些 YouTube 原本的調整方式全部失效
+   * 注意: 原生字幕只是 opacity: 0，仍然有排版，所以讀得到字級
+   */
+  function baseFontPx(player, seg) {
+    const native = seg ? parseFloat(getComputedStyle(seg).fontSize) : NaN
+    if (Number.isFinite(native) && native >= MIN_BASE_PX) return native
+    return Math.max(14, player.clientWidth * FALLBACK_BASE_RATIO)
+  }
+
+  function ensureBox(player, seg) {
     if (!box) {
       box = document.createElement('div')
       box.className = 'bt-yt-box'
@@ -43,8 +61,9 @@
     // YouTube 換影片時可能重建播放器，每次都確認掛載位置
     if (box.parentElement !== player) player.appendChild(box)
     player.classList.add(HIDE_NATIVE_CLASS)
-    // 字級跟著播放器寬度縮放，一般、劇院、全螢幕模式都適用
-    box.style.setProperty('--bt-yt-base', `${Math.max(14, Math.round(player.clientWidth * 0.026))}px`)
+    // 注意: 值沒變就不要寫，寫入 style 會觸發我們自己的 MutationObserver，變成每次節流週期都空轉一次
+    const base = `${Math.round(baseFontPx(player, seg) * 10) / 10}px`
+    if (box.style.getPropertyValue('--bt-yt-base') !== base) box.style.setProperty('--bt-yt-base', base)
   }
 
   function readLines() {
@@ -98,10 +117,12 @@
         return
       }
 
-      ensureBox(player)
+      ensureBox(player, document.querySelector(SEGMENT_SELECTOR))
       box.hidden = false
       // 英文直接鏡像 YouTube 的行，不經翻譯，所以沒有延遲
-      enEl.textContent = lines.join('\n')
+      // 注意: 文字一樣就不要重設，重設 textContent 會觸發 childList 變動，同樣會造成空轉
+      const enText = lines.join('\n')
+      if (enEl.textContent !== enText) enEl.textContent = enText
 
       const text = lines.join(' ')
       if (text === lastSeen) return
@@ -118,7 +139,14 @@
     }
 
     state.mo = new MutationObserver(() => schedule(sync, SYNC_THROTTLE_MS))
-    state.mo.observe(document.body, { childList: true, subtree: true, characterData: true })
+    // 注意: 也監看 style 屬性：YouTube 用 + / - 調字幕大小時，只改原生字幕的 inline style，不一定重建節點
+    state.mo.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['style']
+    })
     sync()
   }
 

@@ -149,3 +149,10 @@ popup → storage.sync → onChanged → 外觀即時套用 / 位置重建 / You
   - 踩坑：`--verify` 一開始用 `rsync -a`，會比對權限位元，部署時刻意改成唯讀，結果每個檔案都被誤報；改用 `rsync -r --checksum` 只比內容。
   - 踩坑：每日上限一開始放 `storage.sync`，審查時發現內容腳本可以寫 sync，改放 `storage.local`。
   - 測試：e2e 91 項全過，包含 CSP 實測（`example.com` 被擋、`api.anthropic.com` 收到 401）；實際竄改部署檔，`--verify` 有抓到。
+- 2026-11-16：v0.8.1，YouTube 字幕大小可以調整。
+  - 問題：使用者反映 YouTube 字幕大小無法調整。原因：我們隱藏原生字幕、改畫自己的框，字級用「播放器寬度 × 2.6%」自己算，結果 YouTube 自己的字幕大小設定和 `+` / `-` 快捷鍵全部失效；彈窗的字級滑桿雖然有影響，但它是網頁譯文的設定（70–160%），放在「譯文外觀」底下，很難聯想到 YouTube。
+  - 先排除一個假設：懷疑 YouTube 會洗掉 `<html>` 上的 CSS 變數，用真的 YouTube 觀察 8 秒，變數都還在，不是這個原因。
+  - 修正：基準字級改讀原生字幕的 `getComputedStyle().fontSize`（原生字幕只是 opacity 0，還有排版），YouTube 的字幕設定與 `+` / `-` 恢復作用；新增獨立的「YouTube 字幕」滑桿（50–250%，`ytScale`），跟網頁字級分開。
+  - 監看範圍加上 `style` 屬性：YouTube 按 `+` / `-` 時只改原生字幕的 inline style。
+  - 順便修正原本就有的效能 bug：每次同步都重設英文的 `textContent`，會觸發自己的 MutationObserver，字幕在畫面上時每 150ms 空轉一次。改成值有變才寫入；e2e 量 1.2 秒內 0 次變動。
+  - 測試：e2e 96 項，包含滑桿即時生效、模擬 `+` 鍵、網頁字級不影響 YouTube、閒置不空轉。

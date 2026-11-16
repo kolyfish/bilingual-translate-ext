@@ -236,6 +236,17 @@ $('youtube-auto').addEventListener('change', () => {
   chrome.storage.sync.set({ youtubeAuto: $('youtube-auto').checked })
 })
 
+// 同字級滑桿：拖動只更新數字，放開才寫入（storage.sync 有寫入頻率上限）
+const showYtScale = () => {
+  $('yt-scale-value').textContent = `${Settings.sanitize({ ytScale: $('yt-scale').value }).ytScale}%`
+}
+$('yt-scale').min = Settings.YT_SCALE_MIN
+$('yt-scale').max = Settings.YT_SCALE_MAX
+$('yt-scale').addEventListener('input', showYtScale)
+$('yt-scale').addEventListener('change', () => {
+  chrome.storage.sync.set({ ytScale: Settings.sanitize({ ytScale: $('yt-scale').value }).ytScale })
+})
+
 // 決策: 黑名單存 storage.local 不存 sync，瀏覽習慣不需要同步到 Google 帳號
 $('save-denylist').addEventListener('click', async () => {
   const lines = $('denylist').value.split('\n').map((s) => s.trim().toLowerCase()).filter(Boolean)
@@ -254,6 +265,8 @@ Settings.load().then((settings) => {
   checkRadio('claude-model', settings.claudeModel)
   checkRadio('position', settings.position)
   $('youtube-auto').checked = settings.youtubeAuto
+  $('yt-scale').value = settings.ytScale
+  showYtScale()
   fillAppearance(settings)
 })
 

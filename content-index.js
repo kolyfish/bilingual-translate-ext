@@ -190,7 +190,7 @@
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'sync') return
     Settings.load().then((settings) => {
-      if (state.enabled && (changes.bgColor || changes.fontScale)) {
+      if (state.enabled && (changes.bgColor || changes.fontScale || changes.ytScale)) {
         Settings.applyTo(root, settings)
       }
       if (isYouTube && changes.youtubeAuto) {

@@ -7,7 +7,7 @@
 
 | 項目 | 內容 |
 |------|------|
-| 版本 | 0.8.0 |
+| 版本 | 0.8.1 |
 | 平台 | Google Chrome 138+（桌面版），開發環境為 Mac mini M4 + Chrome 157 |
 | 技術 | Manifest V3、原生 JavaScript、零第三方執行期依賴 |
 | 翻譯引擎 | **預設本機**：Chrome 內建 Translator API，文字不離開電腦；可改用 Claude（自己的 API 金鑰）或 Google gtx，都要手動授權 |
@@ -97,6 +97,7 @@
 | 字級 | 95% | 70%–160% | `storage.sync` |
 | 網頁譯文位置 | 英文下方 | 下方 / 上方 | `storage.sync` |
 | YouTube 自動雙語字幕 | 關 | 開 / 關 | `storage.sync` |
+| YouTube 字幕大小 | 100% | 50%–250%，以 YouTube 原生字幕大小為基準；跟網頁譯文字級分開 | `storage.sync` |
 | 自訂黑名單 | 空 | 一行一個網域 | `storage.local`（不同步） |
 
 - 文字顏色不用設定，程式會依底色自動挑對比較高的黑色或白色
@@ -209,7 +210,8 @@ popup → storage.sync → content-index onChanged
 1. 原生字幕設成 `opacity: 0`（還留在 DOM 裡，可以讀英文）
 2. 在 `#movie_player` 裡畫自己的框，以 `bottom` 定位、往上長。中文是最後一個元素，**固定貼在底部**，英文變兩行時只會往上長
 3. 控制列自動隱藏時（`.ytp-autohide`），框會跟著往下移，跟原生字幕一致
-4. 字級跟著播放器寬度縮放（`--bt-yt-base`），一般、劇院、全螢幕模式都適用
+4. 字級以 **YouTube 原生字幕的字級**為基準（`--bt-yt-base`），再乘上彈窗「YouTube 字幕」的倍率（`--bt-yt-scale`）。原生字幕的字級本來就反映播放器大小，以及你在 YouTube 裡的字幕設定（設定 → 字幕 → 選項 → 字型大小、快捷鍵 `+` / `-`），所以這些調整方式都有效。讀不到原生字級時，才退回用播放器寬度估算
+5. 只有值真的變了才寫入 DOM。重設 `textContent` 或 style 都會觸發我們自己的 MutationObserver，不檢查的話，字幕在畫面上時會每 150ms 空轉一次
 
 ---
 
@@ -241,7 +243,7 @@ popup → storage.sync → content-index onChanged
 node tests/unit-background.js
 ```
 
-**端對端測試**（91 項；需要 Playwright 和它附的 Chromium）
+**端對端測試**（96 項；需要 Playwright 和它附的 Chromium）
 ```bash
 PLAYWRIGHT_PATH=/path/to/node_modules/playwright node tests/e2e.js
 ```
@@ -289,6 +291,7 @@ e2e 的做法：
 | 本機翻譯品質不理想 | 本機模型比線上小 `[推測]` | 需要時改用 Google |
 | 某個網站一直 `✕` | 在內建黑名單、網域含 `bank`，或頁面有密碼欄位 | 這是刻意的設計，見 `SECURITY.md` |
 | YouTube 沒有雙語框 | 沒開英文 CC，或沒勾「自動雙語字幕」 | 開 CC，勾選設定 |
+| YouTube 字幕太大或太小 | — | 彈窗的「YouTube 字幕」滑桿；或在 YouTube 播放器按 `+` / `-`、改 YouTube 的字幕字型大小 |
 | YouTube 中文延遲 | 自動字幕逐字長出來時，會等停頓才翻 | 正常行為；可以調 `content-youtube.js` 的 `STABLE_MS`、`MAX_WAIT_MS` |
 | 改了程式沒反應 | 沒重新載入擴充或網頁 | 見 4.1 |
 

@@ -23,10 +23,14 @@
     position: 'below',
     youtubeAuto: false,
     bgColor: '#8b1a1a', // 深紅
-    fontScale: 95 // 百分比，相對於原文字級
+    fontScale: 95, // 網頁譯文字級，百分比，相對於原文字級
+    ytScale: 100 // YouTube 雙語字幕大小，百分比，相對於 YouTube 原生字幕的字級
   }
   const FONT_SCALE_MIN = 70
   const FONT_SCALE_MAX = 160
+  // 決策: YouTube 字幕另外一個滑桿、範圍比網頁寬；全螢幕看片時常需要放很大
+  const YT_SCALE_MIN = 50
+  const YT_SCALE_MAX = 250
   // Claude 每日花費上限（美元），超過就停用 Claude 直到隔天；防止被灌文字或程式錯誤一直燒錢
   // 資安: 上限存在 storage.local（已鎖成只有擴充本身能讀寫），不放 sync；
   //       sync 內容腳本也能寫，萬一內容腳本被利用，也改不了上限
@@ -41,6 +45,7 @@
   function sanitize(raw) {
     const s = { ...DEFAULTS, ...raw }
     const scale = Number(s.fontScale)
+    const ytScale = Number(s.ytScale)
     return {
       // 資安: 只接受已知的引擎名稱，其他任何值都退回本機
       engine: ENGINES.includes(s.engine) ? s.engine : 'local',
@@ -50,7 +55,10 @@
       bgColor: HEX_COLOR_RE.test(s.bgColor) ? s.bgColor.toLowerCase() : DEFAULTS.bgColor,
       fontScale: Number.isFinite(scale)
         ? Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, Math.round(scale)))
-        : DEFAULTS.fontScale
+        : DEFAULTS.fontScale,
+      ytScale: Number.isFinite(ytScale)
+        ? Math.min(YT_SCALE_MAX, Math.max(YT_SCALE_MIN, Math.round(ytScale)))
+        : DEFAULTS.ytScale
     }
   }
 
@@ -90,10 +98,11 @@
     el.style.setProperty('--bt-bg', settings.bgColor)
     el.style.setProperty('--bt-fg', textColorFor(settings.bgColor))
     el.style.setProperty('--bt-scale', String(settings.fontScale / 100))
+    el.style.setProperty('--bt-yt-scale', String(settings.ytScale / 100))
   }
 
   function clearFrom(el) {
-    for (const name of ['--bt-bg', '--bt-fg', '--bt-scale']) el.style.removeProperty(name)
+    for (const name of ['--bt-bg', '--bt-fg', '--bt-scale', '--bt-yt-scale']) el.style.removeProperty(name)
   }
 
   globalThis.BT_SETTINGS = {
@@ -107,6 +116,8 @@
     loadDailyLimit,
     FONT_SCALE_MIN,
     FONT_SCALE_MAX,
+    YT_SCALE_MIN,
+    YT_SCALE_MAX,
     sanitize,
     load,
     textColorFor,

@@ -349,6 +349,13 @@ h2 {
   accent-color: var(--seal);
 }
 
+.note kbd {
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font: 11px/1.4 var(--sans);
+}
+
 .field output {
   color: var(--muted);
   font-size: 12px;

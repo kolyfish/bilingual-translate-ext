@@ -209,7 +209,9 @@
   align-items: center;
   gap: 4px;
   font-family: 'YouTube Noto', Roboto, 'PingFang TC', sans-serif;
-  font-size: calc(var(--bt-scale, 0.95) * var(--bt-yt-base, 20px));
+  /* --bt-yt-base 是 YouTube 原生字幕的字級（會反映 YouTube 自己的字幕設定與 + / - 快捷鍵），
+     --bt-yt-scale 是彈窗「YouTube 字幕大小」的倍率；跟網頁譯文的 --bt-scale 分開 */
+  font-size: calc(var(--bt-yt-scale, 1) * var(--bt-yt-base, 20px));
   line-height: 1.4;
   text-align: center;
   pointer-events: none;

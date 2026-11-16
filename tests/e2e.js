@@ -90,7 +90,7 @@ const PAGES = {
   'www.youtube.com': `<!doctype html><html><body>
     <div id="movie_player" style="position:relative;width:960px;height:540px;background:#000">
       <div class="ytp-caption-window-container"><div class="caption-window">
-        <span class="captions-text"><span class="caption-visual-line"><span class="ytp-caption-segment">Hello everyone and welcome back to the channel</span></span></span>
+        <span class="captions-text"><span class="caption-visual-line"><span class="ytp-caption-segment" style="font-size: 20px">Hello everyone and welcome back to the channel</span></span></span>
       </div></div>
     </div>
   </body></html>`
@@ -303,6 +303,36 @@ async function suiteB() {
     check('英文鏡像原生字幕', (await yt.locator('.bt-yt-en').textContent()) === 'Hello everyone and welcome back to the channel')
     const nativeOpacity = await yt.locator('.ytp-caption-window-container').evaluate((el) => getComputedStyle(el).opacity)
     check('原生字幕被隱藏（但還在 DOM 可讀）', nativeOpacity === '0', `opacity=${nativeOpacity}`)
+
+    // 字幕大小：以原生字幕字級為準，再乘上彈窗的「YouTube 字幕」倍率
+    const boxPx = () => yt.locator('.bt-yt-box').evaluate((el) => parseFloat(getComputedStyle(el).fontSize))
+    const waitBoxPx = (px) => yt.waitForFunction((v) => Math.abs(parseFloat(getComputedStyle(document.querySelector('.bt-yt-box')).fontSize) - v) < 0.5, px)
+    check('字幕框大小跟原生字幕一致（100%）', Math.abs((await boxPx()) - 20) < 0.5, `${await boxPx()}px`)
+    await sw.evaluate(() => chrome.storage.sync.set({ ytScale: 150 }))
+    await waitBoxPx(30)
+    check('「YouTube 字幕」調到 150%，字幕框即時變大', true, `${await boxPx()}px`)
+    // 模擬在 YouTube 按 + 放大字幕：YouTube 只改原生字幕的 inline style
+    await yt.evaluate(() => (document.querySelector('.ytp-caption-segment').style.fontSize = '28px'))
+    await waitBoxPx(42)
+    check('YouTube 自己放大字幕（+ 鍵）時，字幕框跟著變大', true, `${await boxPx()}px`)
+    // 網頁譯文字級調到最大，同時把 YouTube 倍率改回 100%：結果必須剛好是原生的 28px，代表兩個設定互不影響
+    await sw.evaluate(() => chrome.storage.sync.set({ fontScale: 160, ytScale: 100 }))
+    await waitBoxPx(28)
+    check('網頁譯文的字級設定不影響 YouTube 字幕', true, `${await boxPx()}px`)
+    await sw.evaluate(() => chrome.storage.sync.remove(['fontScale', 'ytScale']))
+    await yt.evaluate(() => (document.querySelector('.ytp-caption-segment').style.fontSize = '20px'))
+    await waitBoxPx(20)
+
+    // 字幕沒有變化時不該空轉：觀察 1.2 秒，我們的框不應該有任何 DOM 變動
+    const idleMutations = await yt.evaluate(async () => {
+      let count = 0
+      const mo = new MutationObserver((ms) => (count += ms.length))
+      mo.observe(document.querySelector('.bt-yt-box'), { childList: true, subtree: true, characterData: true, attributes: true })
+      await new Promise((r) => setTimeout(r, 1200))
+      mo.disconnect()
+      return count
+    })
+    check('字幕不動時不會空轉重繪', idleMutations === 0, `${idleMutations} 次變動`)
 
     // 模擬自動字幕：換一句後逐字長出來，每 120ms 多一個字，最後換到第二行
     const zhRect = () => yt.locator('.bt-yt-zh').evaluate((el) => el.getBoundingClientRect().bottom)
