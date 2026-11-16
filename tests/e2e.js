@@ -334,6 +334,37 @@ async function suiteB() {
     })
     check('字幕不動時不會空轉重繪', idleMutations === 0, `${idleMutations} 次變動`)
 
+    // 翻譯比字幕換句還慢（每句 700ms、字幕每 250ms 換一句）：中文要持續更新，不能全部被丟掉
+    await sw.evaluate(() => {
+      self.__slowCalls = []
+      self.__origGtx = REMOTE_ENGINES.gtx.translate
+      REMOTE_ENGINES.gtx.translate = async (t) => {
+        self.__slowCalls.push(t)
+        await new Promise((r) => setTimeout(r, 700))
+        return `慢譯：${t}`
+      }
+    })
+    const shownDuring = await yt.evaluate(async () => {
+      const seg = document.querySelector('.ytp-caption-segment')
+      const shown = new Set()
+      for (let i = 0; i < 12; i++) {
+        seg.textContent = `Sentence number ${i} is being spoken right now`
+        await new Promise((r) => setTimeout(r, 250))
+        const zh = document.querySelector('.bt-yt-zh')?.textContent || ''
+        if (zh.startsWith('慢譯')) shown.add(zh)
+      }
+      return shown.size
+    })
+    check('翻譯比字幕慢時，換句期間中文仍持續更新', shownDuring >= 2, `換 12 句期間顯示過 ${shownDuring} 種譯文`)
+    await yt.waitForFunction(() => /Sentence number 11/.test(document.querySelector('.bt-yt-zh')?.textContent || ''))
+    check('講完之後最後一句一定會翻出來', true)
+    const slowCalls = await sw.evaluate(() => self.__slowCalls.length)
+    check('過期的句子直接跳過，不送出翻譯', slowCalls < 12, `12 句只送出 ${slowCalls} 次`)
+    await sw.evaluate(() => {
+      REMOTE_ENGINES.gtx.translate = self.__origGtx
+    })
+    await yt.evaluate(() => (document.querySelector('.ytp-caption-segment').textContent = 'Hello everyone and welcome back to the channel'))
+
     // 模擬自動字幕：換一句後逐字長出來，每 120ms 多一個字，最後換到第二行
     const zhRect = () => yt.locator('.bt-yt-zh').evaluate((el) => el.getBoundingClientRect().bottom)
     const enHeight = () => yt.locator('.bt-yt-en').evaluate((el) => el.getBoundingClientRect().height)

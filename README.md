@@ -7,7 +7,7 @@
 
 | 項目 | 內容 |
 |------|------|
-| 版本 | 0.8.2 |
+| 版本 | 0.8.3 |
 | 平台 | Google Chrome 138+（桌面版），開發環境為 Mac mini M4 + Chrome 157 |
 | 技術 | Manifest V3、原生 JavaScript、零第三方執行期依賴 |
 | 翻譯引擎 | **預設本機**：Chrome 內建 Translator API，文字不離開電腦；可改用 Claude（自己的 API 金鑰）或 Google gtx，都要手動授權 |
@@ -187,7 +187,8 @@ manifest 靜態注入（只限 www.youtube.com）
   → MutationObserver（150ms 節流）讀 .caption-visual-line
   → 英文：直接鏡像到 .bt-yt-en（無延遲）
   → 中文：換句立刻翻；逐字增加時等停頓 0.7 秒，最多等 2.5 秒
-  → 結果只接受「最新一次請求」→ .bt-yt-zh
+  → 同一時間只送一個請求；翻譯途中的新句子只保留最新一句，中間的直接略過
+  → 譯文只要比畫面上的新就顯示 → .bt-yt-zh
 
 【設定變更】
 popup → storage.sync → content-index onChanged
@@ -243,7 +244,7 @@ popup → storage.sync → content-index onChanged
 node tests/unit-background.js
 ```
 
-**端對端測試**（96 項；需要 Playwright 和它附的 Chromium）
+**端對端測試**（99 項；需要 Playwright 和它附的 Chromium）
 ```bash
 PLAYWRIGHT_PATH=/path/to/node_modules/playwright node tests/e2e.js
 ```

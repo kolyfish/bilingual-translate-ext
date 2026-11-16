@@ -12,7 +12,7 @@
   const BT = window.BT
   // 注意: manifest 靜態注入後，按 Alt+A 會再注入一次，已載入就不重複定義
   if (BT.youtube) return
-  const { state, normalize, enqueue, translate, schedule } = BT
+  const { state, normalize, translate, schedule } = BT
 
   const PLAYER_SELECTOR = '#movie_player'
   const LINE_SELECTOR = '.ytp-caption-window-container .caption-visual-line'
@@ -90,6 +90,35 @@
     let lastSeen = ''
     let requestedText = ''
     let lastRequestAt = 0
+    // 每次請求遞增的編號；shownSeq 是畫面上中文對應的請求
+    let latestSeq = 0
+    let shownSeq = 0
+    // 決策: YouTube 同一時間只送一個翻譯請求，翻譯途中出現的新句子只保留最新一句（pending）
+    // 原因: 字幕換句比翻譯快時，中間的句子翻了也來不及看，只會拖慢最新那句；用 Claude 時還白花錢。
+    //       共用佇列做不到這點：Google 併發 4、Claude 併發 16，每句一出現就送出，根本不會排隊
+    let inFlight = false
+    let pending = null
+
+    const pump = async () => {
+      if (inFlight || !pending || session !== state.session) return
+      const { seq, text } = pending
+      pending = null
+      inFlight = true
+      try {
+        const zh = await translate(text)
+        // 決策: 只要比畫面上的中文新就顯示，不要求一定是最新一句
+        // 踩坑: 原本只接受「最新一句」的譯文；翻譯比字幕換句慢時（Claude 要幾秒），
+        //       每個譯文回來時字幕都換了，結果全部被丟掉，中文幾乎不更新
+        if (session === state.session && zh && zhEl && seq > shownSeq) {
+          shownSeq = seq
+          zhEl.textContent = zh
+        }
+      } finally {
+        // translate() 失敗會回傳 null 不會拋錯；finally 只是確保下一句一定會接著送
+        inFlight = false
+        pump()
+      }
+    }
 
     const request = (text) => {
       clearTimeout(stableTimer)
@@ -97,12 +126,8 @@
       if (text === requestedText) return
       requestedText = text
       lastRequestAt = Date.now()
-      enqueue(async () => {
-        const zh = await translate(text)
-        // 只接受最新一次請求的結果，避免舊句子的譯文蓋掉新的
-        if (session !== state.session || text !== requestedText || !zh || !zhEl) return
-        zhEl.textContent = zh
-      })
+      pending = { seq: ++latestSeq, text }
+      pump()
     }
 
     const sync = () => {
